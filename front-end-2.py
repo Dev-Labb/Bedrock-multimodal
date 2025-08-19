@@ -33,8 +33,7 @@ if st.button("Submit"):
                     }
                 )
 
-                '''For Debug: display raw responses meaning it will display everything for debugging purposes. Not sure if streamlit has a better debugging mode, but this gets the job done for now. Gives more detail than just standard error.
-                i.e. more than just 500, 403, etc. actual "full" repsonses from back end. Furthermore, Cloudwatch can be looked at for more logging info for both lambda and API gateway.'''
+                
                 st.write("🔍 Raw response for debugging/full transparency:", response.text)
 
 #Basically, this looks for 200 code response
@@ -59,3 +58,4 @@ if st.button("Submit"):
 
             except Exception as e:
                 st.error(f"Request failed: {str(e)}")
+
