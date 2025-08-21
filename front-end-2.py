@@ -11,7 +11,7 @@ MODELS = {
     "Meta LLaMA3 2-1B Instruct": "llama3-2-1b" #Very important that you keep track of "exact" id/version of the model you use.
 }
 
-st.title("🧠Waddup Cordellll!!!. Welcome to my app Son!!! (work in progress, but ay.. we getting there.")
+st.title("🧠Waddup Riiiiicky Bobby!!!. Welcome to my app Son!!! AKA the current ghetto version of chatpt/claude. We getting there...
 
 #This allows you to select which models you want based on the above model selection under MODELS & type in prompts in prompt area box
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
@@ -58,6 +58,7 @@ if st.button("Submit"):
 
             except Exception as e:
                 st.error(f"Request failed: {str(e)}")
+
 
 
 
