@@ -97,7 +97,7 @@ if st.button("Fetch RF Data"):
             response = requests.get(RF_API_URL, params=params)
 
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
-            #st.write("🔍 Raw RF API response:", response.text)
+            st.write("🔍 Raw RF API response:", response.text)
 
             if response.status_code == 200:
                 try:
@@ -127,3 +127,4 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
