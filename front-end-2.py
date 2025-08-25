@@ -104,18 +104,18 @@ if st.button("Fetch RF Data"):
                     data = response.json()
 
                     # Check if data is a list of dictionaries, suitable for DataFrame
-                   if isinstance(data, list):
+                    if isinstance(data, list):
                         # Create DataFrame from the list of dictionaries
                         df = pd.DataFrame(data)
 
-                       ''' # Optionally, style the dataframe (if you want)
+                        # Optionally, style the dataframe (if you want)
                         styled_df = df.style.set_table_styles(
                             [{'selector': 'thead th', 
-                              'props': [('background-color', '#f5f5f5'), ('color', 'green')]}]
-                        ).hide_index()'''
+                              'props': [('background-color', '#f5f5f5'), ('color', 'black')]}]
+                        ).hide_index()
 
                         st.success("RF Data Results")
-                        st.dataframe(df)  # display the styled dataframe
+                        st.dataframe(styled_df)  # display the styled dataframe
                     else:
                         st.warning("Expected a list of records, but received something else.")
 
@@ -128,5 +128,3 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
-
-
