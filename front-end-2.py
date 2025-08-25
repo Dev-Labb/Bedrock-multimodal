@@ -126,6 +126,17 @@ if st.button("Fetch RF Data"):
                     # Create DataFrame from the cleaned data
                     df = pd.DataFrame(data)
 
+                    # Now expand the IQ data into multiple columns for real and imaginary parts
+                    if 'iq_data' in df.columns:
+                        # Expand iq_data into separate real and imaginary columns
+                        iq_real_columns = pd.DataFrame(df['iq_data'].apply(lambda x: [i.real for i in x]).tolist(), 
+                                                       columns=[f"iq_real_{i+1}" for i in range(df['iq_data'].apply(len).max())])
+                        iq_imag_columns = pd.DataFrame(df['iq_data'].apply(lambda x: [i.imag for i in x]).tolist(), 
+                                                       columns=[f"iq_imag_{i+1}" for i in range(df['iq_data'].apply(len).max())])
+                        
+                        # Merge expanded IQ data columns back into the DataFrame
+                        df = pd.concat([df.drop(columns=['iq_data']), iq_real_columns, iq_imag_columns], axis=1)
+
                     # Optionally, style the dataframe (if you want)
                     styled_df = df.style.set_table_styles(
                         [{'selector': 'thead th', 
