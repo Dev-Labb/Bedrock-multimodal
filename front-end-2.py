@@ -103,32 +103,27 @@ if st.button("Fetch RF Data"):
                 try:
                     data = response.json()
 
-                    # Check if data is a list of dictionaries, suitable for DataFrame
-                    #if isinstance(data, list):
-                     # Create DataFrame from the list of dictionaries
-                    df = pd.DataFrame(data)
+                    # Directly try to create a DataFrame from the response JSON
+                    try:
+                        df = pd.DataFrame(data)
+                        # Optionally, style the dataframe (if you want)
+                        styled_df = df.style.set_table_styles(
+                            [{'selector': 'thead th', 
+                              'props': [('background-color', '#f5f5f5'), ('color', 'black')]}]
+                        ).hide_index()
 
-                    # Optionally, style the dataframe (if you want)
-                    styled_df = df.style.set_table_styles(
-                        [{'selector': 'thead th', 
-                            'props': [('background-color', '#f5f5f5'), ('color', 'black')]}]
-                    ).hide_index()
+                        st.success("RF Data Results")
+                        st.dataframe(styled_df)  # display the styled dataframe
+                    except ValueError as ve:
+                        st.error("Data format is not suitable for creating a DataFrame.")
+                        st.text(f"Error: {ve}")
 
-                    st.success("RF Data Results")
-                    st.dataframe(styled_df)  # display the styled dataframe
-                    #else:
-                        #st.warning("Expected a list of records, but received something else.")
-
-             '''   except Exception as parse_err:
-                     st.error("Failed to parse JSON from RF API.")
-                     st.text(f"Error: {parse_err}")
+                except Exception as parse_err:
+                    st.error("Failed to parse JSON from RF API.")
+                    st.text(f"Error: {parse_err}")
             else:
-                 st.error(f"Error {response.status_code}")
-                 st.code(response.text)
+                st.error(f"Error {response.status_code}")
+                st.code(response.text)
 
-             except Exception as e:
-                 st.error(f"Request failed: {str(e)}")'''
-
-
-
-
+        except Exception as e:
+            st.error(f"Request failed: {str(e)}")
