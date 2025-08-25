@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------
+# Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
 # This is my current API url under "testing" though live I'll probably go with the standard dev/test/prod 
 # setup for api's later on. I added RF_API_URL as well to test db backend
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------
 
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
 RF_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements" 
@@ -17,15 +18,16 @@ MODELS = {
     "Meta LLaMA3 2-1B Instruct": "llama3-2-1b" #Very important that you keep track of "exact" id/version of the model you use.
 }
 
-st.title("🧠Multi-Modal Bedrock Test")
+st.title("🧠 Multi-Modal Bedrock Test")
 
-# -------------------------------------------------------------------------
+#-------------------------------------------------------------------------
 # This allows you to select which models you want based on the above model
 # selection under MODELS & type in prompts in prompt area box. Will be passed
 # along in body.
 # -------------------------------------------------------------------------
+
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-prompt = st.text_area("Please enter your prompt here:")
+prompt = st.text_area("Enter your prompt:")
 
 #handles submit element and makes sure you inputted a prompt 
 if st.button("Submit to Model"):
@@ -94,14 +96,29 @@ if st.button("Fetch RF Data"):
             params = {"start": str(start_date), "end": str(end_date), "limit": limit}
             response = requests.get(RF_API_URL, params=params)
 
-            # 🔍 Debugging: Shows the raw RF API response
-            st.write("🔍 Raw RF API response:", response.text)
+            # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
+            #st.write("🔍 Raw RF API response:", response.text)
 
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    st.success("RF Data Results")
-                    st.dataframe(data)  # shows the data in table format for readability
+
+                    # Check if data is a list of dictionaries, suitable for DataFrame
+                    if isinstance(data, list):
+                        # Create DataFrame from the list of dictionaries
+                        df = pd.DataFrame(data)
+
+                        # Optionally, style the dataframe (if you want)
+                        styled_df = df.style.set_table_styles(
+                            [{'selector': 'thead th', 
+                              'props': [('background-color', '#f5f5f5'), ('color', 'black')]}]
+                        ).hide_index()
+
+                        st.success("RF Data Results")
+                        st.dataframe(styled_df)  # display the styled dataframe
+                    else:
+                        st.warning("Expected a list of records, but received something else.")
+
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
                     st.text(f"Error: {parse_err}")
@@ -111,6 +128,3 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
-
-
-
