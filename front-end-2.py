@@ -119,15 +119,16 @@ if st.button("Fetch RF Data"):
                     #else:
                         #st.warning("Expected a list of records, but received something else.")
 
-            except Exception as parse_err:
-                 st.error("Failed to parse JSON from RF API.")
-                 st.text(f"Error: {parse_err}")
-        else:
-             st.error(f"Error {response.status_code}")
-             st.code(response.text)
+             '''   except Exception as parse_err:
+                     st.error("Failed to parse JSON from RF API.")
+                     st.text(f"Error: {parse_err}")
+            else:
+                 st.error(f"Error {response.status_code}")
+                 st.code(response.text)
 
-     except Exception as e:
-         st.error(f"Request failed: {str(e)}")
+             except Exception as e:
+                 st.error(f"Request failed: {str(e)}")'''
+
 
 
 
