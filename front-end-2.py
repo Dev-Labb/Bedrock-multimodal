@@ -25,8 +25,8 @@ st.title("🧠Multi-Modal Bedrock Test")
 # along in body.
 # -------------------------------------------------------------------------
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-prompt = st.text_area("Enter your prompt:")
-
+prompt = st.chat_input("Enter your prompt here:", accept_file=True)
+prompt
 #handles submit element and makes sure you inputted a prompt 
 if st.button("Submit to Model"):
     if not prompt.strip():
@@ -111,3 +111,4 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
