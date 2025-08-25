@@ -104,7 +104,7 @@ if st.button("Fetch RF Data"):
                     data = response.json()
 
                     # Check if data is a list of dictionaries, suitable for DataFrame
-                    if isinstance(data, list):
+                    #if isinstance(data, list):
                         # Create DataFrame from the list of dictionaries
                         df = pd.DataFrame(data)
 
@@ -116,8 +116,8 @@ if st.button("Fetch RF Data"):
 
                         st.success("RF Data Results")
                         st.dataframe(styled_df)  # display the styled dataframe
-                    else:
-                        st.warning("Expected a list of records, but received something else.")
+                    #else:
+                        #st.warning("Expected a list of records, but received something else.")
 
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
@@ -128,3 +128,4 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
