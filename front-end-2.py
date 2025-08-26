@@ -90,8 +90,8 @@ with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
 #handles submit element and makes sure query parameters are passed to API
-if st.button("Fetch RF Data"):
-    with st.spinner("Fetching measurements..."):
+if st.button("Grab RF Data"):
+    with st.spinner("Grabbing RF measurements..."):
         try:
             params = {"start": str(start_date), "end": str(end_date), "limit": limit}
             response = requests.get(RF_API_URL, params=params)
@@ -113,3 +113,4 @@ if st.button("Fetch RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
