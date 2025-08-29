@@ -1,102 +1,93 @@
 import streamlit as st
 import requests
 import json
+from openai import OpenAI
 
-API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
-DB_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
+# Initialize OpenAI client
+client = OpenAI()
 
-MODELS = {
-    "Claude 3.5 Sonnet": "claude-sonnet",
-    "Amazon Nova Micro": "nova-micro",
-    "Meta LLaMA3 2-1B Instruct": "llama3-2-1b"
-}
+# Config
+API_BASE = "https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/testing"
+BEDROCK_MODEL = "anthropic.claude-3-sonnet-20240229-v1:0"
 
-st.title("🧠 Multi-Modal Bedrock + RDS RAG (with Summarization)")
+st.title("📡 RF Data + Bedrock Chatbot")
 
-model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-prompt = st.text_area("Enter your prompt:")
+# Input box
+user_prompt = st.text_input("Enter your prompt")
 
-# Optional params for RF data
-with st.expander("Add RF Data Context"):
-    start = st.text_input("Start timestamp (YYYY-MM-DD)")
-    end = st.text_input("End timestamp (YYYY-MM-DD)")
-    limit = st.number_input("Limit results", value=10, min_value=1, max_value=100)
+# Query parameters
+start_date = st.text_input("Start date (YYYY-MM-DD)", "2025-08-01")
+end_date = st.text_input("End date (YYYY-MM-DD)", "2025-08-02")
+limit = st.number_input("Limit rows", min_value=1, max_value=50, value=5)
 
-if st.button("Submit"):
-    if not prompt.strip():
-        st.warning("Please enter a prompt.")
+def fetch_rf_data(start, end, limit):
+    try:
+        url = f"{API_BASE}/rf-data?start={start}&end={end}&limit={limit}"
+        resp = requests.get(url, timeout=10)
+
+        if resp.status_code != 200:
+            return None, f"Error {resp.status_code}: {resp.text}"
+
+        data = resp.json()
+
+        # ✅ handle list vs dict safely
+        if isinstance(data, list):
+            subset = data[:limit]
+        else:
+            subset = [data]
+
+        return subset, None
+
+    except Exception as e:
+        return None, str(e)
+
+if user_prompt:
+    rf_data, error = fetch_rf_data(start_date, end_date, limit)
+
+    if error:
+        st.error(f"Could not fetch RF data: {error}")
     else:
-        with st.spinner("Fetching RF data + summarizing..."):
-            rf_summary = ""
-            try:
-                # Step 1: Fetch RF Data
-                db_resp = requests.get(DB_API_URL, params={
-                    "start": start or None,
-                    "end": end or None,
-                    "limit": limit
-                })
-                if db_resp.status_code == 200:
-                    data = db_resp.json()
-                    if data:
-                        # Step 2: Summarize RF Data with small model (Nova Micro)
-                        summarization_prompt = f"""
-Here are RF measurement rows:
+        st.subheader("📊 Raw RF Data (first rows)")
+        st.json(rf_data)  # ✅ Debug: show raw API response
 
-{json.dumps(data[:limit], indent=2)}
+        # Build summarization prompt
+        summarization_prompt = f"""
+        Here are RF measurement rows:
 
-Summarize the key patterns, anomalies, and useful stats in plain English.
-Only highlight information useful for answering questions.
-"""
+        {json.dumps(rf_data, indent=2)}
 
-                        sum_resp = requests.post(
-                            API_URL,
-                            headers={"Content-Type": "application/json"},
-                            json={
-                                "prompt": summarization_prompt,
-                                "model": "nova-micro"  # force summarization with cheap model
-                            }
-                        )
+        Summarize the key patterns, anomalies, and useful stats in plain English.
+        Only highlight information useful for answering questions.
+        """
 
-                        if sum_resp.status_code == 200:
-                            rf_summary = sum_resp.json().get("response", "")
-                        else:
-                            st.warning("Summarization failed, passing raw data.")
-                            rf_summary = json.dumps(data[:limit], indent=2)
-                    else:
-                        st.info("No RF data returned for given filters.")
-                else:
-                    st.warning(f"DB API error {db_resp.status_code}")
-            except Exception as e:
-                st.warning(f"Could not fetch/summarize RF data: {e}")
+        try:
+            # First, summarize the RF data with Nova Micro
+            summary_resp = client.responses.create(
+                model="gpt-4.1-mini",  # You can switch to "gpt-4.1" if you want more power
+                input=summarization_prompt
+            )
+            rf_summary = summary_resp.output_text
 
-            # Step 3: Combine user query + summary
-            full_prompt = f"""
-User query: {prompt}
+            st.subheader("📝 RF Data Summary")
+            st.write(rf_summary)
 
-Relevant RF context (summarized):
-{rf_summary}
-"""
+            # Now, answer the user’s question using both summary + prompt
+            final_prompt = f"""
+            The user asked: "{user_prompt}"
 
-            # Step 4: Send to main chosen model
-            with st.spinner("Calling main model..."):
-                try:
-                    response = requests.post(
-                        API_URL,
-                        headers={"Content-Type": "application/json"},
-                        json={"prompt": full_prompt, "model": MODELS[model_choice]}
-                    )
+            Here is a summary of relevant RF measurements:
+            {rf_summary}
 
-                    st.write("🔍 Raw response:", response.text)
+            Use both the question and the RF data summary to give the most accurate, grounded answer.
+            """
 
-                    if response.status_code == 200:
-                        json_response = response.json()
-                        output = json_response.get("response", "No valid response found.")
-                        st.success("Model response:")
-                        st.markdown(f"```\n{output.strip()}\n```")
-                    else:
-                        st.error(f"Error {response.status_code}")
-                        st.code(response.text)
+            final_resp = client.responses.create(
+                model=BEDROCK_MODEL,
+                input=final_prompt
+            )
 
-                except Exception as e:
-                    st.error(f"Request failed: {str(e)}")
+            st.subheader("🤖 Chatbot Answer")
+            st.write(final_resp.output_text)
 
+        except Exception as e:
+            st.error(f"Error during summarization or final response: {e}")
