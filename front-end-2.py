@@ -3,7 +3,7 @@ import requests
 import json
 
 # Config
-API_BASE = "https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/testing"
+API_BASE = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
 BEDROCK_MODEL = "anthropic.claude-3-sonnet-20240229-v1:0"
 SUMMARIZER_MODEL = "gpt-4.1-mini"  # lighter summarizer
 
@@ -88,3 +88,4 @@ if user_prompt:
 
         except Exception as e:
             st.error(f"Error during summarization or final response: {e}")
+
