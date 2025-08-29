@@ -102,9 +102,9 @@ if st.button("Grab RF Data"):
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    data_2 = pd.read_json(response.json)
+                    df = pd.DataFrame(data)
                     st.success("RF Data Results")
-                    st.dataframe(data_2)  # shows the data in table format for readability
+                    st.dataframe(df)  # shows the data in table format for readability
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
                     st.text(f"Error: {parse_err}")
@@ -114,6 +114,7 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
 
