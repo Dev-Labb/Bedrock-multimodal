@@ -84,9 +84,9 @@ st.header("📡 RF Data Query Test to Backend")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    start_date = st.date_input("Start Date")
+    start_date = st.date_input("Start Date", value="2023-05-05 00:00:00")
 with col2:
-    end_date = st.date_input("End Date")
+    end_date = st.date_input("End Date", value="2023-05-05 00:00:00"))
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -124,4 +124,5 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
