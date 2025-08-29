@@ -77,7 +77,7 @@ if st.button("Submit to Model"):
 # -------------------------------------------------------------------------
 # This handles the RF Data Query Stuff to the DB
 # Allows dynamic queries with start/end/limit to call the Postgres API via my lambda fucntion/api gateway
-# and return results. Looked at stremalit docs to help me set up.
+# and returns results. Looked at stremalit docs to help me set up.
 # -------------------------------------------------------------------------
 st.header("📡 RF Data Query Test to Backend") 
 
@@ -97,7 +97,7 @@ if st.button("Grab RF Data"):
             response = requests.get(RF_API_URL, params=params)
 
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
-            st.write("🔍 Raw RF API response:", response.text)
+            #st.write("🔍 Raw RF API response:", response.text)
 
             if response.status_code == 200:
                 try:
@@ -113,5 +113,6 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
