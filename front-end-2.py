@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import json  # Required to parse the stringified JSON inside the "body" field
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -15,7 +16,7 @@ RF_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/gen
 MODELS = {
     "Claude 3.5 Sonnet": "claude-sonnet",
     "Amazon Nova Micro": "nova-micro",
-    "Meta LLaMA3 2-1B Instruct": "llama3-2-1b" #Very important that you keep track of "exact" id/version of the model you use.
+    "Meta LLaMA3 2-1B Instruct": "llama3-2-1b"  #Very important that you keep track of "exact" id/version of the model you use.
 }
 
 st.title("🧠 Multi-Modal Bedrock Test")
@@ -101,10 +102,19 @@ if st.button("Grab RF Data"):
 
             if response.status_code == 200:
                 try:
-                    data = response.json()
-                    df = pd.DataFrame(data)
+                    # Parse the JSON response
+                    raw_json = response.json()
+
+                    # The "body" field contains a stringified JSON array, so we need to parse it
+                    body_data = json.loads(raw_json["body"])
+
+                    # Convert the parsed data (list of dictionaries) into a DataFrame
+                    df = pd.DataFrame(body_data)
+
+                    # Display the results in a table
                     st.success("RF Data Results")
-                    st.dataframe(df)  # shows the data in table format for readability
+                    st.dataframe(df)
+
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
                     st.text(f"Error: {parse_err}")
@@ -114,8 +124,3 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
-
-
-
-
-
