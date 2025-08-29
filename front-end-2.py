@@ -1,21 +1,16 @@
 import streamlit as st
 import requests
 import json
-from openai import OpenAI
-
-# Initialize OpenAI client
-client = OpenAI()
 
 # Config
 API_BASE = "https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/testing"
 BEDROCK_MODEL = "anthropic.claude-3-sonnet-20240229-v1:0"
+SUMMARIZER_MODEL = "gpt-4.1-mini"  # lighter summarizer
 
 st.title("📡 RF Data + Bedrock Chatbot")
 
-# Input box
+# Inputs
 user_prompt = st.text_input("Enter your prompt")
-
-# Query parameters
 start_date = st.text_input("Start date (YYYY-MM-DD)", "2025-08-01")
 end_date = st.text_input("End date (YYYY-MM-DD)", "2025-08-02")
 limit = st.number_input("Limit rows", min_value=1, max_value=50, value=5)
@@ -41,6 +36,17 @@ def fetch_rf_data(start, end, limit):
     except Exception as e:
         return None, str(e)
 
+def call_bedrock(model, prompt):
+    """Call Bedrock via API Gateway Lambda proxy"""
+    url = f"{API_BASE}/generate"
+    payload = {"modelId": model, "inputText": prompt}
+    resp = requests.post(url, json=payload, timeout=30)
+
+    if resp.status_code != 200:
+        raise Exception(f"Bedrock error {resp.status_code}: {resp.text}")
+
+    return resp.json().get("outputText", "").strip()
+
 if user_prompt:
     rf_data, error = fetch_rf_data(start_date, end_date, limit)
 
@@ -48,9 +54,9 @@ if user_prompt:
         st.error(f"Could not fetch RF data: {error}")
     else:
         st.subheader("📊 Raw RF Data (first rows)")
-        st.json(rf_data)  # ✅ Debug: show raw API response
+        st.json(rf_data)
 
-        # Build summarization prompt
+        # Summarization step
         summarization_prompt = f"""
         Here are RF measurement rows:
 
@@ -59,19 +65,13 @@ if user_prompt:
         Summarize the key patterns, anomalies, and useful stats in plain English.
         Only highlight information useful for answering questions.
         """
-
         try:
-            # First, summarize the RF data with Nova Micro
-            summary_resp = client.responses.create(
-                model="gpt-4.1-mini",  # You can switch to "gpt-4.1" if you want more power
-                input=summarization_prompt
-            )
-            rf_summary = summary_resp.output_text
+            rf_summary = call_bedrock(SUMMARIZER_MODEL, summarization_prompt)
 
             st.subheader("📝 RF Data Summary")
             st.write(rf_summary)
 
-            # Now, answer the user’s question using both summary + prompt
+            # Final step: answer with Claude Sonnet
             final_prompt = f"""
             The user asked: "{user_prompt}"
 
@@ -81,13 +81,10 @@ if user_prompt:
             Use both the question and the RF data summary to give the most accurate, grounded answer.
             """
 
-            final_resp = client.responses.create(
-                model=BEDROCK_MODEL,
-                input=final_prompt
-            )
+            final_answer = call_bedrock(BEDROCK_MODEL, final_prompt)
 
             st.subheader("🤖 Chatbot Answer")
-            st.write(final_resp.output_text)
+            st.write(final_answer)
 
         except Exception as e:
             st.error(f"Error during summarization or final response: {e}")
