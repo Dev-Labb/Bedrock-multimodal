@@ -1,81 +1,127 @@
-new
-
 import streamlit as st
 import requests
 import pandas as pd
+import json  # Required to parse the stringified JSON inside the "body" field
 
 # ---------------------------------------------------------------------------------------------------------------
-# This is the API URL for the Lambda function, which is set up to handle queries to the Postgres database.
-# The query parameters include "start", "end", and "limit" to filter data based on timestamps.
-# We will modify the frontend to make sure it passes the right parameters to Lambda.
-# ---------------------------------------------------------------------------------------------------------------
-API_URL = "https://your-lambda-api-url.com"  # Replace with your actual Lambda API URL
+# Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
+# This is my current API url under "testing" though live I'll probably go with the standard dev/test/prod 
+# setup for api's later on. I added RF_API_URL as well to test db backend
+# ----------------------------------------------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------------------------------------------
-# Streamlit frontend interface setup, with titles and input fields.
-# This allows the user to specify a date range (start and end) and limit for the number of results.
-# ---------------------------------------------------------------------------------------------------------------
-st.title("📡 RF Data Query Interface")
+MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
+RF_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements" 
 
-# Input fields for start and end dates, as well as a limit on the number of results.
+# Model options — These must match keys in Lambda's ALLOWED_MODELS (this call will ultimately use lambda as a proxy first so look at the lambda function for more details).
+MODELS = {
+    "Claude 3.5 Sonnet": "claude-sonnet",
+    "Amazon Nova Micro": "nova-micro",
+    "Meta LLaMA3 2-1B Instruct": "llama3-2-1b"  #Very important that you keep track of "exact" id/version of the model you use.
+}
+
+st.title("🧠 Multi-Modal Bedrock Test")
+
+#-------------------------------------------------------------------------
+# This allows you to select which models you want based on the above model
+# selection under MODELS & type in prompts in prompt area box. Will be passed
+# along in body.
+# -------------------------------------------------------------------------
+
+model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
+prompt = st.text_area("Enter your prompt:")
+
+#handles submit element and makes sure you inputted a prompt 
+if st.button("Submit to Model"):
+    if not prompt.strip():
+        st.warning("Please enter a prompt.")
+    else:
+        with st.spinner("Calling model..."):
+            #Pay close attention here. This is your headers and has severe impact on whether you will get the response you want. Can also be modified to get different formats/schemas back based on different backend setups.
+            try:
+                response = requests.post(
+                    MODEL_API_URL,
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "prompt": prompt,
+                        "model": MODELS[model_choice]
+                    }
+                )
+
+                # 🔍 Debugging: Shows the raw API output before parsing
+                st.write("🔍 Raw response for debugging. Will remove once more production ready:", response.text)
+
+                #Basically, this looks for successful runs and gets the correct output. 
+                #I added for trouble shooting differnt models as some runs returned 200 code,
+                #but didn't give info back. This helps, but you may need to still look at logs in cloudwatch.
+                if response.status_code == 200:
+                    try:
+                        json_response = response.json()
+                        output = (
+                            json_response.get("response") or
+                            json_response.get("message") or
+                            json_response.get("error") or
+                            "No valid response found."
+                        )
+                        st.success("Model response:")
+                        st.markdown(f"```\n{output.strip()}\n```")
+                    except Exception as parse_err:
+                        st.error("Failed to parse JSON from the response.")
+                        st.text(f"Error: {parse_err}")
+                else:
+                    st.error(f"Error {response.status_code}")
+                    st.code(response.text)
+
+            except Exception as e:
+                st.error(f"Request failed: {str(e)}")
+
+
+# -------------------------------------------------------------------------
+# This handles the RF Data Query Stuff to the DB
+# Allows dynamic queries with start/end/limit to call the Postgres API via my lambda fucntion/api gateway
+# and returns results. Looked at stremalit docs to help me set up.
+# -------------------------------------------------------------------------
+st.header("📡 RF Data Query Test to Backend") 
+
 col1, col2, col3 = st.columns(3)
 with col1:
     start_date = st.date_input("Start Date")
 with col2:
     end_date = st.date_input("End Date")
 with col3:
-    limit = st.number_input("Limit", min_value=1, max_value=100, value=50)  # Default limit is 50
+    limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
-# ---------------------------------------------------------------------------------------------------------------
-# Function to format the date input as 'YYYY-MM-DD HH:MM:SS' (add 00:00:00 for start and 23:59:59 for end).
-# ---------------------------------------------------------------------------------------------------------------
-def format_date(date, is_start=True):
-    if is_start:
-        return date.strftime("%Y-%m-%d") + " 00:00:00"  # Start time at 00:00:00
-    else:
-        return date.strftime("%Y-%m-%d") + " 23:59:59"  # End time at 23:59:59
+#handles submit element and makes sure query parameters are passed to API
+if st.button("Grab RF Data"):
+    with st.spinner("Grabbing RF measurements..."):
+        try:
+            params = {"start": str(start_date), "end": str(end_date), "limit": limit}
+            response = requests.get(RF_API_URL, params=params)
 
-# ---------------------------------------------------------------------------------------------------------------
-# Button to trigger the API request when the user submits the query.
-# This will send the start, end, and limit parameters to the Lambda API.
-# ---------------------------------------------------------------------------------------------------------------
-if st.button("Submit Query to Lambda"):
-    if not start_date or not end_date:
-        st.warning("Please select both start and end dates.")
-    else:
-        with st.spinner("Querying RF Data..."):
-            # Format the start and end dates as required by the Lambda function.
-            formatted_start = format_date(start_date, is_start=True)
-            formatted_end = format_date(end_date, is_start=False)
+            # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
+            #st.write("🔍 Raw RF API response:", response.text)
 
-            # API query parameters: Pass the start, end, and limit to the Lambda function
-            params = {
-                "start": formatted_start,
-                "end": formatted_end,
-                "limit": limit
-            }
+            if response.status_code == 200:
+                try:
+                    # Parse the JSON response
+                    raw_json = response.json()
 
-            try:
-                # Send GET request to the Lambda API
-                response = requests.get(API_URL, params=params)
+                    # The "body" field contains a stringified JSON array, so we need to parse it
+                    body_data = json.loads(raw_json["body"])
 
-                # Check if the response is successful (HTTP status 200)
-                if response.status_code == 200:
-                    data = response.json()
+                    # Convert the parsed data (list of dictionaries) into a DataFrame
+                    df = pd.DataFrame(body_data)
 
-                    # If the data returned is not empty, convert it to a Pandas DataFrame for display
-                    if data:
-                        df = pd.DataFrame(data)
-                        st.success("Data fetched successfully!")
-                        st.dataframe(df)  # Display the data as a table
-                    else:
-                        st.warning("No data found for the selected date range.")
+                    # Display the results in a table
+                    st.success("RF Data Results")
+                    st.dataframe(df)
 
-                else:
-                    # If the API request failed, display the error code and message
-                    st.error(f"Error {response.status_code}: {response.text}")
+                except Exception as parse_err:
+                    st.error("Failed to parse JSON from RF API.")
+                    st.text(f"Error: {parse_err}")
+            else:
+                st.error(f"Error {response.status_code}")
+                st.code(response.text)
 
-            except Exception as e:
-                # In case of a network or API error, show the exception message
-                st.error(f"Request failed: {str(e)}")
+        except Exception as e:
+            st.error(f"Request failed: {str(e)}")
 
