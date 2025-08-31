@@ -13,7 +13,12 @@ import json  # Required to parse the stringified JSON inside the "body" field
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
 RF_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements" 
 
-# Model options — These must match keys in Lambda's ALLOWED_MODELS (this call will ultimately use lambda as a proxy first so look at the lambda function for more details).
+# ---------------------------------------------------------------------------------------------------------------
+# Model options - These must match keys in AWS Lambda's "ALLOWED_MODELS" varible. For more context please refer
+# to the coinciding lamba function. The llama3 model is currently broken because of the format I used to invoke
+# the model currently. My plan currrently is to change to models/formats that use AWS Converse API More info can
+# be found here: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html  
+# ---------------------------------------------------------------------------------------------------------------
 MODELS = {
     "Claude 3.5 Sonnet": "claude-sonnet",
     "Amazon Nova Micro": "nova-micro",
@@ -22,22 +27,21 @@ MODELS = {
 
 st.title("🧠 Multi-Modal Bedrock Test")
 
-#-------------------------------------------------------------------------
-# This allows you to select which models you want based on the above model
-# selection under MODELS & type in prompts in prompt area box. Will be passed
-# along in body.
-# -------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
+# This allows you to select which models you want based on the above model options.
+# Passes both model selection and your prompt to model in json body. 
+# -----------------------------------------------------------------------------------------
 
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 prompt = st.text_area("Enter your prompt:")
 
-#handles submit element and makes sure you inputted a prompt 
+# Handles submit widget and makes sure you inputted a prompt 
 if st.button("Submit to Model"):
     if not prompt.strip():
         st.warning("Please enter a prompt.")
     else:
         with st.spinner("Calling model..."):
-            #Pay close attention here. This is your headers and has severe impact on whether you will get the response you want. Can also be modified to get different formats/schemas back based on different backend setups.
+            # Sends POST request to model and configures headers.
             try:
                 response = requests.post(
                     MODEL_API_URL,
@@ -48,12 +52,15 @@ if st.button("Submit to Model"):
                     }
                 )
 
-                # 🔍 Debugging: Shows the raw API output before parsing
+                # This is specifically for Debugging: Shows the raw API output before parsing
                 st.write("🔍 Raw response for debugging. Will remove once more production ready:", response.text)
 
-                #Basically, this looks for successful runs and gets the correct output. 
-                #I added for trouble shooting differnt models as some runs returned 200 code,
-                #but didn't give info back. This helps, but you may need to still look at logs in cloudwatch.
+                #------------------------------------------------------------------------------
+                # Basically, this looks for successful runs and gets the correct output.I added 
+                # for troubleshooting different models as some runs returned 200 status code, 
+                # but didn't give info back from the model. This helps, but you may need to 
+                # still look at logs in cloudwatch for full details on errors.
+                #-------------------------------------------------------------------------------
                 if response.status_code == 200:
                     try:
                         json_response = response.json()
@@ -76,11 +83,14 @@ if st.button("Submit to Model"):
                 st.error(f"Request failed: {str(e)}")
 
 
-# -------------------------------------------------------------------------
-# This handles the RF Data Query Stuff to the DB
-# Allows dynamic queries with start/end/limit to call the Postgres API via my lambda fucntion/api gateway
-# and returns results. Looked at stremalit docs to help me set up.
-# -------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------
+# This handles the RF Data Queries to the DB. Allows dynamic queries with 
+# start/end/limit parmeters to call the Postgres API via my lambda fucntion/api gateway
+# combo and return results. Looked at stremalit docs to help me set up.
+
+###Note: Need to change to use datetime ISO format. To do so I need to add in correct parmeter after each input.
+# This is currently why you'll get the wrong data back from database calls.### <--- Will update after fix.
+#--------------------------------------------------------------------------------------------------------------
 st.header("📡 RF Data Query Test to Backend") 
 
 col1, col2, col3 = st.columns(3)
@@ -91,7 +101,7 @@ with col2:
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
-#handles submit element and makes sure query parameters are passed to API
+# Handles button widget and makes sure query parameters are passed to API
 if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
@@ -99,23 +109,23 @@ if st.button("Grab RF Data"):
             response = requests.get(RF_API_URL, params=params)
 
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
-            #st.write("🔍 Raw RF API response:", response.text)
+            #st.write("🔍 Raw RF API response:", response.text) <-- You can uncheck if you want to see raw response data
 
             if response.status_code == 200:
                 try:
-                    # Parse the JSON response
+                    # Parses the JSON response
                     raw_json = response.json()
 
-                    # The "body" field contains a stringified JSON array, so we need to parse it
+                    # The "body" field contains a stringified JSON array so grabbing the body.
                     body_data = json.loads(raw_json["body"])
 
-                    # Convert the parsed data (list of dictionaries) into a DataFrame
+                    # Convert the parsed data (list of dictionaries) into a DataFrame with my good friend Pandas
                     df = pd.DataFrame(body_data)
 
-                    # Display the results in a table
+                    # Display the results in a table that is acutally easy to read unlike before. 
                     st.success("RF Data Results")
                     st.dataframe(df)
-
+                #If it doesn't work :( I am sad so I want it to tell me why by giving exceptions below.
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
                     st.text(f"Error: {parse_err}")
@@ -125,5 +135,6 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
