@@ -5,8 +5,9 @@ import json  # Required to parse the stringified JSON inside the "body" field
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
-# This is my current API url under "testing" though live I'll probably go with the standard dev/test/prod 
-# setup for api's later on. I added RF_API_URL as well to test db backend
+# These are my API endpoints to API Gateway.Currently, all API url's are under the "testing" stage in API Gateway.
+# I plan to change staging names to dev/test/prod which means these will these two variables will likely change 
+# to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
 # ----------------------------------------------------------------------------------------------------------------
 
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
@@ -124,4 +125,5 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
