@@ -4,14 +4,14 @@ import time
 message = st.chat_message(name="Yo Mama", avatar="👿", width="stretch")
 
 message.write("Waddup Bitch ass mfer!!!")
-time.sleep(2.0)              
+time.sleep(4.0)              
 message.write("👿 Welcome to my App where I like to talk my shit!"
 " 👿 And you aint gone do shit about it!!!") 
-time.sleep(2.0)
+time.sleep(4.0)
 message.write(" 👿 I heard you like diddy parties. You probably got diddied with ya bitch ass...")
-
+time.sleep(3.0)
 st.write('👿 I just wanted yall all to know ERIC IS A BITCH!!! AND DONT YALL FORGET IT!!')
-
+time.sleep(3.0)
 st.title(' 👿 Beep Bop Boop Calculating if you\'re a bitch...')
 
 # Add a placeholder
@@ -27,6 +27,7 @@ for i in range(100):
 st.title('🚨 🚨 🚨 Bitch Alert!!! 🚨 🚨 🚨 Bitch Alert!!🚨 🚨 🚨')
 
 'BEEEEEEEEEEEEP!!!! ...Confirmed, Bitch. Initializing Diddy party'
+
 
 
 
