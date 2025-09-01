@@ -24,4 +24,6 @@ for i in range(100):
   bar.progress(i + 1)
   time.sleep(0.1)
 
-'BEEEEP...Confirmed. You are indeed a lil bitch'
+'BEEEEP!!! According to my calculations, you are undeniably a lil bitch'
+
+
