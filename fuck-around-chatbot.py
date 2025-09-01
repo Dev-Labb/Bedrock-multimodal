@@ -8,6 +8,8 @@ message.write("Waddup Bitch ass mfer!!!" \
 "I heard you like diddy parties." \
 "You probably got diddied ya with ya bitch ass...")
 
+st.write('👿 I just wanted yall all to know ERIC IS A BITCH!!! AND DONT YALL FORGET IT!!')
+
 
 
 
