@@ -91,7 +91,7 @@ if st.button("Submit to Model"):
 ###Note: Need to change to use datetime ISO format. To do so I need to add in correct parmeter after each input.
 # This is currently why you'll get the wrong data back from database calls.### <--- Will update after fix.
 #--------------------------------------------------------------------------------------------------------------
-st.header("📡 RF Data Query between (2023-05-05T00:00:00.000Z-2023 - 2023-06-11T00:00:00.000Z)")
+st.header("📡 RF Data Query between 2023-05-05T00:00:00.000Z-2023 - 2023-06-11T00:00:00.000Z")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -135,6 +135,7 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
 
