@@ -28,6 +28,7 @@ st.title('🚨 🚨 🚨 Bitch Alert!!! 🚨 🚨 🚨 Bitch Alert!!🚨 🚨 �
 
 'BEEEEEEEEEEEEP!!!! ...Confirmed, Bitch. Initializing Diddy party'
 
+st.audio("./Bleep-alert.m4a", autoplay=True)
 prompt = st.chat_input(placeholder="Enter prompt or add a file:", 
                        accept_file=True)
 
