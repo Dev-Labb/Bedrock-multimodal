@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit as st
 import time
 
 message = st.chat_message(name="Yo Mama", avatar="👿", width="stretch")
@@ -24,6 +23,14 @@ for i in range(100):
   bar.progress(i + 1)
   time.sleep(0.1)
 
-'BEEEEP!!! According to my calculations, you are undeniably a lil bitch'
+st.title('🚨 🚨 🚨 Bitch Alert!!! 🚨 🚨 🚨 Bitch Alert!!🚨 🚨 🚨')
+
+'BEEEEEEEEEEEEP!!!! ...Confirmed, Bitch. Initializing Diddy party'
+
+
+
+
+
+
 
 
