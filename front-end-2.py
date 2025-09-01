@@ -17,7 +17,7 @@ limit = st.number_input("Limit rows", min_value=1, max_value=50, value=5)
 
 def fetch_rf_data(start, end, limit):
     try:
-        url = f"{API_BASE}/rf-data?start={start}&end={end}&limit={limit}"
+        url = f"{API_BASE}/?start={start}&end={end}&limit={limit}"
         resp = requests.get(url, timeout=10)
 
         if resp.status_code != 200:

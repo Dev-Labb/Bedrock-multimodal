@@ -28,6 +28,13 @@ st.title('🚨 🚨 🚨 Bitch Alert!!! 🚨 🚨 🚨 Bitch Alert!!🚨 🚨 �
 
 'BEEEEEEEEEEEEP!!!! ...Confirmed, Bitch. Initializing Diddy party'
 
+prompt = st.chat_input(placeholder="Enter prompt or add a file:", 
+                       accept_file=True)
+
+if prompt and prompt.text:
+    st.markdown(prompt.text)
+if prompt and prompt["files"]:
+    st.image(prompt["files"][0])
 
 
 
