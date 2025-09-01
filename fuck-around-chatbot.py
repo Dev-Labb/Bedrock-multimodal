@@ -3,15 +3,16 @@ import time
 
 message = st.chat_message(name="Yo Mama", avatar="👿", width="stretch")
 
-message.write("Waddup Bitch ass mfer!!!" \
-"Welcome to my App where I like to talk my shit!" \
-" And you aint gone do shit about it!!! " \
-"I heard you like diddy parties." \
-"You probably got diddied ya with ya bitch ass...")
+message.write("Waddup Bitch ass mfer!!!")
+time.sleep(2.0)              
+message.write("👿 Welcome to my App where I like to talk my shit!"
+" 👿 And you aint gone do shit about it!!!") 
+time.sleep(2.0)
+message.write(" 👿 I heard you like diddy parties. You probably got diddied with ya bitch ass...")
 
 st.write('👿 I just wanted yall all to know ERIC IS A BITCH!!! AND DONT YALL FORGET IT!!')
 
-st.title('Beep Bop Boop Calculating if you\'re a bitch...')
+st.title(' 👿 Beep Bop Boop Calculating if you\'re a bitch...')
 
 # Add a placeholder
 latest_iteration = st.empty()
@@ -26,6 +27,7 @@ for i in range(100):
 st.title('🚨 🚨 🚨 Bitch Alert!!! 🚨 🚨 🚨 Bitch Alert!!🚨 🚨 🚨')
 
 'BEEEEEEEEEEEEP!!!! ...Confirmed, Bitch. Initializing Diddy party'
+
 
 
 
