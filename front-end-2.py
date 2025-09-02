@@ -128,10 +128,10 @@ if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
             # Convert to ISO 8601 with explicit time portion since DB values have timestamps
-            start_iso = datetime.combine(start_date, datetime.min.time()).isoformat()
-            end_iso = datetime.combine(end_date, datetime.max.time()).isoformat()
+            start_iso = datetime.combine(start_date)
+            end_iso = datetime.combine(end_date)
 
-            params = {"start": start_iso, "end": end_iso, "limit": limit}
+            params = {"start": start_date, "end": end_date, "limit": limit}
             response = requests.get(RF_API_URL, params=params)
 
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
@@ -161,4 +161,5 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
