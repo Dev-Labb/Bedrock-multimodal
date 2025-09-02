@@ -1,7 +1,7 @@
 import json
 import psycopg2
 import os
-import datetime
+from datetime import datetime
 #Note to self: consider importing boto3.clientErrors or whatever the library is called again so I can catch errors
 #Same for adding logging options for cloudwatch events etc. 
 
