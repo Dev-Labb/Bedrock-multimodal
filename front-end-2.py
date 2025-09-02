@@ -118,7 +118,7 @@ with col3:
 if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
-            params = {"start": start_date + ',', "end": end_date + ',', "limit": limit}
+            params = {"start": start_date, "end": end_date, "limit": limit}
             response = requests.get(RF_API_URL, params=params)
             st.write(params)
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
@@ -148,6 +148,7 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
 
