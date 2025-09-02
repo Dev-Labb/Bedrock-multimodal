@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import json  # Required to parse the stringified JSON inside the "body" field
-from datetime import datetime  # Needed to format dates properly
+from datetime import date, datetime
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -109,9 +109,17 @@ st.header("📡 RF Data Query to database")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    start_date = st.date_input("Start Date", value=pd.to_datetime("2023-05-05"))
+    start_date = st.date_input(
+        "Start Date",
+        value=date(2023, 5, 5),  # ✅ Proper datetime.date object
+        min_value=date(2023, 5, 5)
+    )
 with col2:
-    end_date = st.date_input("End Date", value=pd.to_datetime("2023-05-06"))
+    end_date = st.date_input(
+        "End Date",
+        value=date(2023, 5, 6),  # ✅ Slightly after start so you see range
+        max_value=date(2023, 6, 11)
+    )
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -119,7 +127,7 @@ with col3:
 if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
-            # Convert dates to full ISO strings (midnight UTC assumed since date_input only gives a date)
+            # Convert to ISO 8601 with explicit time portion since DB values have timestamps
             start_iso = datetime.combine(start_date, datetime.min.time()).isoformat() + "Z"
             end_iso = datetime.combine(end_date, datetime.max.time()).isoformat() + "Z"
 
