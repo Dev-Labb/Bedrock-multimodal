@@ -6,7 +6,7 @@ Clone repo including requirement.txt file, and run "streamlit run front-end-2.py
 
 # Issues/Known Bugs:
 - There is a known bug for one of the models ("Meta LLaMA3 2-1B Instruct"). The issue is linked to the way the json payload is being sent to the model. Need to change the "format" of the payload to include expected syntactical format said model.
-- Currently fixing "timestamps" column in the database that the API calls from AWS lambda. (This currently why you'll likely get dates/table responses that differ from your "start" and "end" times at the moment.
+- Currently fixing "timestamps" column in the database that the API calls from AWS lambda. (This currently why you'll likely get dates/data inside the dataframe table responses that differ from your "start" and "end" times at the moment).
 - Fixing prompt box to also allow file uploads. (In my testing in a staging environment, file uploads can be up to 200MB in size, but also may be limited by the server/web engine you deploy the backend on (i.e. Nginx, Apache, etc. have additional options to configure in order to allow maximum file sizes to be uploaded).
 - Working on documenting API information for sending and recieving RESTFUL responses. This is specific to this local repo, but being noted in case we decide to build off the current design in ay way until we have access to any internal API's that may be availible. FastAPI is another option that has the benefit of building out API documentation "automagically" as you build out your resources etc., but has other considerations/additinal overhead.
 
