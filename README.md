@@ -10,7 +10,7 @@ Clone repo including requirement.txt file, and run "streamlit run front-end-2.py
 - Fixing prompt box to also allow file uploads. (In my testing in a staging environment, file uploads can be up to 200MB in size, but also may be limited by the server/web engine you deploy the backend on (i.e. Nginx, Apache, etc. have additional options to configure in order to allow maximum file sizes to be uploaded).
 - Working on documenting API information for sending and recieving RESTFUL responses. This is specific to this local repo, but being noted in case we decide to build off the current design in ay way until we have access to any internal API's that may be availible. FastAPI is another option that has the benefit of building out API documentation "automagically" as you build out your resources etc., but has other considerations/additinal overhead.
 
-# Potential Features/Topics of Discussion: 
+# Potential Future Features/Topics of Discussion: 
 Explore only using Converse API:
 AWS Bedrock has an API for talking/"conversing" with models. Currently, The code is using multiple "formats" to talk to each different model separtely that requires code that formats json payloads to meet each model's expected syntactical format. Using AWS converse API may be able to:
 
