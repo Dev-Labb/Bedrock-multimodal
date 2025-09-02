@@ -128,8 +128,8 @@ if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
             # Convert to ISO 8601 with explicit time portion since DB values have timestamps
-            start_iso = datetime.combine(start_date, datetime.min.time()).isoformat() + "Z"
-            end_iso = datetime.combine(end_date, datetime.max.time()).isoformat() + "Z"
+            start_iso = datetime.combine(start_date, datetime.min.time()).isoformat()
+            end_iso = datetime.combine(end_date, datetime.max.time()).isoformat()
 
             params = {"start": start_iso, "end": end_iso, "limit": limit}
             response = requests.get(RF_API_URL, params=params)
@@ -161,3 +161,4 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
