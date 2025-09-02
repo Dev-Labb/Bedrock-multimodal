@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import json  # Required to parse the stringified JSON inside the "body" field
-from datetime import datetime  # Needed for ISO formatting
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -109,9 +108,9 @@ st.header("📡 RF Data Query to database")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    start_date = st.date_input("Start Date", value=pd.to_datetime("2023-05-05"))
+    start_date = st.date_input("Start Date", value='2023-05-05T00:00:00.000Z', min_value='2023-05-05T00:00:00.000Z')
 with col2:
-    end_date = st.date_input("End Date", value=pd.to_datetime("2023-05-06"))
+    end_date = st.date_input("End Date", value='2023-05-05T00:00:00.000Z', max_value='2023-06-11T23:59:59.000Z')
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -119,11 +118,7 @@ with col3:
 if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
-            # ✅ FIX: Convert to proper ISO 8601 datetime strings before sending
-            start_iso = datetime.combine(start_date, datetime.min.time()).isoformat() + "Z"
-            end_iso = datetime.combine(end_date, datetime.max.time()).isoformat() + "Z"
-
-            params = {"start": start_iso, "end": end_iso, "limit": limit}
+            params = {"start": str(start_date), "end": str(end_date), "limit": limit}
             response = requests.get(RF_API_URL, params=params)
 
             # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
@@ -153,3 +148,17 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
