@@ -35,16 +35,18 @@ st.title("🧠 Multi-Modal Bedrock Test")
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 prompt = st.text_area("Enter your prompt:")
 
-'''FEATURE FIX TO TRY: You can probably just replace line 36 with the following code block and it will change 
-   replace the st.text_area widget with st.chat_input without issue but I haven't tried it here yet:
+#------------------------------------------------------------------------------------------------------------
+# FEATURE FIX TO TRY: I can probably just replace line 36 with the following code block and it will change 
+# replace the st.text_area widget with st.chat_input without issue but I haven't tried it here yet, but have 
+# made this widget elsewhere as quick test and just copied that code here based on documetnation:
    
-prompt = st.chat_input(placeholder="Enter prompt or add a file:", <--- try on line 36 when I get the chance
-                       accept_file=True)
+#prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True) 
 
-if prompt and prompt.text:
-    st.markdown(prompt.text)
-if prompt and prompt["files"]:
-    st.image(prompt["files"][0])'''
+#if prompt and prompt.text:
+#    st.markdown(prompt.text)
+#if prompt and prompt["files"]:
+#    st.image(prompt["files"][0])'''
+#------------------------------------------------------------------------------------------------------------
 
 # Handles submit widget and makes sure you inputted a prompt 
 if st.button("Submit to Model"):
@@ -146,6 +148,7 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
 
 
