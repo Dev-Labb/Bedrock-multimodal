@@ -1,0 +1,124 @@
+# This API HAS NOT BEEN properly tested and will likely NEVER EVER be used for anything production related. 
+# This is solely for collaborative purposes. 
+
+openapi: 3.0.1
+info:
+  title: RF Measurements API
+  version: 1.0.0
+  description: |
+    API for querying RF measurement data stored in PostgreSQL.
+    Supports time ranges, frequency filtering, location filtering,
+    aggregation, and grouping for analytics use cases on dummy data. 
+    Currently under construction.
+
+servers:
+  - url: https://api.example.com   # Gonna leave this fake for now, but this will be for whatever endpoint for API 
+                                   # Gateway I choose depending on staging.
+paths:
+  /rf/measurements:
+    get:
+      summary: Query RF measurements
+      description: |
+        Returns RF measurements within a specified time window,
+        with optional filters for frequency, location, and aggregation.
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Start timestamp (ISO 8601, e.g. 2025-08-01T00:00:00Z).
+        - in: query
+          name: end
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: End timestamp (ISO 8601).
+        - in: query
+          name: freq_min
+          required: false
+          schema:
+            type: integer
+          description: Minimum frequency in Hz.
+        - in: query
+          name: freq_max
+          required: false
+          schema:
+            type: integer
+          description: Maximum frequency in Hz.
+        - in: query
+          name: location
+          required: false
+          schema:
+            type: string
+          description: Location filter (e.g.Patna, Bihar or and additinal location we add).
+        - in: query
+          name: agg
+          required: false
+          schema:
+            type: string
+            enum: [avg, p95, max, none] # Not thorouhgly tested, but these are typically some of the most common
+            default: none               # enumeration methods folks want so they're being included.
+          description: |
+            Aggregation function:
+            - avg: Average value
+            - p95: 95th percentile
+            - max: Maximum value
+            - none: Raw values
+        - in: query
+          name: group_by
+          required: false
+          schema:
+            type: string
+            enum: [none, hour, day, location, device_type]
+            default: none
+          description: |
+            Grouping dimension for aggregation.
+            - none: No grouping
+            - hour: Aggregate by hour
+            - day: Aggregate by day
+            - location: Aggregate by location
+            - device_type: Aggregate by device type
+      responses:
+        "200":
+          description: Successful query
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: object
+                    additionalProperties: true
+                    description: Echo of input query parameters.
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Timestamp of measurement or aggregation.
+                        frequency:
+                          type: integer
+                          description: Frequency in Hz.
+                        signal_strength:
+                          type: integer
+                          description: Signal strength (dBm).
+                        location:
+                          type: string
+                        device_type:
+                          type: string
+                  metadata:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                        description: Number of rows returned.
+        "400":
+          description: Invalid request parameters.
+        "500":
+          description: Server error.
