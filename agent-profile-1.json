@@ -1,0 +1,53 @@
+{ "agentName": "rf-measurements-agent",
+  "description": "An agent that helps analysts query RF measurement data stored in PostgreSQL via Lambda.",
+  "foundationModel": "anthropic.claude-3-sonnet-20240229-v1:0", 
+  "instruction": "You are a helpful assistant for data analysts. Use tools when a user wants RF measurement data. Summarize, interpret, or answer based on tool results.",
+  "agentResources": {
+    "tools": [
+      {
+        "name": "query_rf_measurements",
+        "description": "Query RF measurement data from PostgreSQL database through a Lambda function. Supports filters such as time range, location, device, antenna, interference, and row limit.",
+        "type": "LAMBDA",
+        "lambda": {
+          "lambdaArn": "arn:aws:lambda:us-east-1:123456789012:function:QueryRFMeasurements"
+        },
+        "inputSchema": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string",
+                "description": "Start timestamp (YYYY-MM-DD HH:MM:SS)"
+              },
+              "end": {
+                "type": "string",
+                "description": "End timestamp (YYYY-MM-DD HH:MM:SS)"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Maximum number of rows to return (default 50, max 500)"
+              },
+              "location": {
+                "type": "string",
+                "description": "Optional filter by location"
+              },
+              "device_type": {
+                "type": "string",
+                "description": "Optional filter by device type"
+              },
+              "antenna_type": {
+                "type": "string",
+                "description": "Optional filter by antenna type"
+              },
+              "interference_type": {
+                "type": "string",
+                "description": "Optional filter by interference type"
+              }
+            },
+            "required": ["start", "end"]
+          }
+        }
+      }
+    ]
+  }
+}
