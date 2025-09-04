@@ -10,7 +10,7 @@ Clone repo including requirement.txt file, and run "streamlit run front-end-2.py
 - The logged_data-v3.py is just generic dummmy data from kaggle. I actually want to scrap it completely and user "faker" library to generarte a better table to more closely simulate data in BA.
 - The openapi.yaml is a slighltly incomplete yaml file that depicts how my api will work once I get the aforementioned newer lambda file working correctly.
 
-# Issues/Known Bugs:
+# Issues/Known Bugs: (None of these will be an issue up high since we had time for extensive testing. This was a rushed project just to build out a workflow): 
 - There is a known bug for one of the models ("Meta LLaMA3 2-1B Instruct"). The issue is linked to the way the json payload is being sent to the model. Need to change the "format" of the payload to include expected syntactical format said model.
 - Currently fixing "timestamps" column in the database that the API calls from AWS lambda. (This currently why you'll likely get dates/data inside the dataframe table responses that differ from your "start" and "end" times at the moment).
 - Fixing prompt box to also allow file uploads. (In my testing in a staging environment, file uploads can be up to 200MB in size, but also may be limited by the server/web engine you deploy the backend on (i.e. Nginx, Apache, etc. have additional options to configure in order to allow maximum file sizes to be uploaded).
