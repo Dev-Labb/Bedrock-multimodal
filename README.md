@@ -1,12 +1,12 @@
 # Bedrock-multimodal
-Repo for building a prototype for Bedrock access and API integration.
+Repo for building a prototype for Bedrock access and API integration. 
 
 # How to use:
 Clone repo including requirement.txt file, and run "streamlit run front-end-2.py" (acting essentially my "main.py" file for now) to run streamlit instance locally with required dependencies. This is how you can make changes to front end. For backend changes we will have to work something out once we get access to a proper backend.
 
 # Addtional Context:
 
-- The lambda folder contains the AWS lambda function code that interfaces on behalf of users to my backend postgres db. The "current-working-lambda.py" is the one I currently have in place that "works" (with some issues noted below) and the "newer-dynamic-query-lambda.py" is the one I want to implement as it is better scrutured for agentic tooling on top of having dynamic querying capabilities.
+- The lambda folder contains the AWS lambda function code that interfaces on behalf of users to my backend postgres db. The "current-working-lambda.py" is the one I currently have in place that "works" (with some issues noted below) and the "newer-dynamic-query-lambda.py" is the one I want to implement as it is better scrutured for agentic tooling on top of having dynamic querying capabilities. "older-lambda" has additional commments to help sort through what lambda is doing for SQL queries if more context is needed.
 - The logged_data-v3.py is just generic dummmy data from kaggle. I actually want to scrap it completely and user "faker" library to generarte a better table to more closely simulate data in BA.
 - The openapi.yaml is a slighltly incomplete yaml file that depicts how my api will work once I get the aforementioned newer lambda file working correctly.
 
