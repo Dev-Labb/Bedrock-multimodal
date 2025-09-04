@@ -1,6 +1,6 @@
 { "agentName": "rf-measurements-agent",
   "description": "An agent that helps analysts query RF measurement data stored in PostgreSQL via Lambda.",
-  "foundationModel": "anthropic.claude-3-sonnet-20240229-v1:0", 
+  "foundationModel": "amazon.nova-micro-v1:0", 
   "instruction": "You are a helpful assistant for data analysts. Use tools when a user wants RF measurement data. Summarize, interpret, or answer based on tool results.",
   "agentResources": {
     "tools": [
