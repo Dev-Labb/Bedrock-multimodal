@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import json  # Required to parse the stringified JSON inside the "body" field
+from datetime import date  # <-- for clean defaults to date_input
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -108,9 +109,10 @@ st.header("📡 RF Data Query to database")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    start_date = st.date_input("Start Date", value='2023-05-05T00:00:00.000Z', min_value='2023-05-05T00:00:00.000Z')
+    # ---- FIX: use clean date values Streamlit expects; keep your label/comments the same
+    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2023, 5, 5))
 with col2:
-    end_date = st.date_input("End Date", value='2023-05-05T00:00:00.000Z', max_value='2023-06-11T23:59:59.000Z')
+    end_date = st.date_input("End Date", value=date(2023, 5, 6), max_value=date(2023, 6, 11))
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=100, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -118,48 +120,58 @@ with col3:
 if st.button("Grab RF Data"):
     with st.spinner("Grabbing RF measurements..."):
         try:
-            params = {"start": str(start_date), "end": str(end_date), "limit": limit}
+            # ---- FIX: Streamlit date_input returns date objects; stringify as YYYY-MM-DD for the API
+            start_str = start_date.strftime("%Y-%m-%d") if hasattr(start_date, "strftime") else str(start_date)
+            end_str = end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)
+
+            params = {"start": start_str, "end": end_str, "limit": int(limit)}
             response = requests.get(RF_API_URL, params=params)
-            st.write(params)
-            # 🔍 Debugging: Shows the raw RF API response. I may change this to build a table with pandas instead and keep old code for debugging. 
-            #st.write("🔍 Raw RF API response:", response.text) <-- You can uncheck if you want to see raw response data
+
+            # For debugging visibility
+            st.write("🔎 Params sent:", params)
+            # st.write("🔍 Raw RF API response:", response.text)
 
             if response.status_code == 200:
                 try:
-                    # Parses the JSON response
-                    raw_json = response.json()
+                    payload = response.json()
 
-                    # The "body" field contains a stringified JSON array so grabbing the body.
-                    body_data = json.loads(raw_json["body"])
+                    # ---- FIX: Support BOTH shapes:
+                    # New proxy response: {"results":[...], "count":N}
+                    # Old non-proxy-wrapped: {"statusCode":200,"body":"{\"results\":...}"}
+                    if isinstance(payload, dict) and "results" in payload:
+                        results = payload.get("results", [])
+                        count = payload.get("count", len(results))
+                    elif isinstance(payload, dict) and "body" in payload:
+                        # Old shape: body contains a JSON string
+                        body_data = json.loads(payload["body"])
+                        # body_data may be {"results":[...], "count":N} OR a raw list
+                        if isinstance(body_data, dict) and "results" in body_data:
+                            results = body_data.get("results", [])
+                            count = body_data.get("count", len(results))
+                        elif isinstance(body_data, list):
+                            results = body_data
+                            count = len(results)
+                        else:
+                            raise ValueError("Unexpected body structure in legacy response.")
+                    else:
+                        raise ValueError("Unexpected response JSON structure from API.")
 
-                    # Convert the parsed data (list of dictionaries) into a DataFrame with my good friend Pandas
-                    df = pd.DataFrame(body_data)
+                    # Convert the parsed data (list of dictionaries) into a DataFrame
+                    df = pd.DataFrame(results)
 
-                    # Display the results in a table that is acutally easy to read unlike before. 
-                    st.success("RF Data Results")
-                    st.dataframe(df)
-                #If it doesn't work :( I am sad so I want it to tell me why by giving exceptions below.
+                    st.success(f"RF Data Results (count={count})")
+                    if not df.empty:
+                        st.dataframe(df)
+                    else:
+                        st.info("No rows returned for the selected range.")
+
                 except Exception as parse_err:
                     st.error("Failed to parse JSON from RF API.")
                     st.text(f"Error: {parse_err}")
+                    st.code(response.text)
             else:
                 st.error(f"Error {response.status_code}")
                 st.code(response.text)
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
