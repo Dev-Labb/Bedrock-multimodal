@@ -43,7 +43,29 @@ prompt = st.text_area("Enter your prompt:")
 
 # ---- Bedrock client (region pulled from your AWS config/role; override if needed) ----
 BEDROCK_REGION = "us-east-1"
-brt = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+brt =import os
+import boto3
+import streamlit as st
+
+# Prefer secrets; fall back to env/profile if not present
+region = (st.secrets.get("aws", {}).get("region")
+          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
+
+access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
+secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
+session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN")
+
+if access_key and secret_key:
+    brt = boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        aws_session_token=session_token  # safe to pass None
+    )
+else:
+    # Falls back to default credential chain (e.g., AWS_PROFILE / instance role)
+    brt = boto3.client("bedrock-runtime", region_name=region)
 
 # ---- Define the tool the model can call ----
 TOOLS = [ {
@@ -176,3 +198,4 @@ if st.button("Ask (tools enabled)"):
                 st.markdown(answer)
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
