@@ -35,13 +35,7 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # -----------------------------------------------------------------------------------------
 
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-#prompt = st.text_area("Enter your prompt:")
-prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True) 
-
-if prompt and prompt.text:
-    st.markdown(prompt.text)
-if prompt and prompt["files"]:
-    st.image(prompt["files"][0])
+prompt = st.text_area("Enter your prompt:")
 
 # -----------------------------------------------------------------------------------------------------------
 # Option B: DIY tool calling (Bedrock Converse + tools) wired into a new button
@@ -201,7 +195,4 @@ if st.button("Ask (tools enabled)"):
                 st.markdown(answer)
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
-
-
-
 
