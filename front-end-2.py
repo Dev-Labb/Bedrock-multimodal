@@ -7,9 +7,22 @@ import pandas as pd
 from datetime import date
 import boto3
 
-# ---------------------------------- App/setup ----------------------------------
+# ---------------------------------------------------------------------------------------------------------------
+# Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
+# These are my API endpoints to API Gateway.Currently, all API url's are under the "testing" stage in API Gateway.
+# I plan to change staging names to dev/test/prod which means these will these two variables will likely change 
+# to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
+# ----------------------------------------------------------------------------------------------------------------
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# WARNING!!!!: THIS IS NOW HERE FOR LEGACY CODE PURPOSES. I AM NOW USING CONVERSE API AND WILL NEED TO CONVERT TO CONVERSE STREAM
+# Model options - These must match keys in AWS Lambda's "ALLOWED_MODELS" varible. For more context please refer
+# to the coinciding lamba function. The llama3 model is currently broken because of the format I used to invoke
+# the model currently. My plan currrently is to change to models/formats that use AWS Converse API More info can
+# be found here: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html  
+# ---------------------------------------------------------------------------------------------------------------------------------
 
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
 RF_API_URL    = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
@@ -20,7 +33,9 @@ MODELS = {
     "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
-# Which of the above are multimodal?
+# Which of the above are multimodal meaning they can use proper API. Other (llama for now) doesn't support what we're going with now. 
+# Keeping for potential down the line testing though...
+
 VISION_CAPABLE = {
     "anthropic.claude-3-5-sonnet-20240620-v1:0": True,
     "amazon.nova-micro-v1:0": True,
@@ -30,7 +45,9 @@ VISION_CAPABLE = {
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 model_id = MODELS[model_choice]
 
-# --------------------------- Bedrock client (Converse) -------------------------
+
+# This is for storing my secrets in order to use AWS resources securely. 
+# No idea yet how they will do it on unclass and how PM will prefer in other location yet.
 region = (st.secrets.get("aws", {}).get("region")
           if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
 
@@ -47,9 +64,14 @@ if access_key and secret_key:
         aws_session_token=session_token
     )
 else:
-    brt = boto3.client("bedrock-runtime", region_name=region)
+    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
 
-# --------------------------------- Tools spec ----------------------------------
+# --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
+# This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
+# we copy the OpenAPI Json file and plug it in as a tool. This will enable model to use API when it needs to based on intstructions
+# you give it in System_MSG aka instructions to model system. Make sure this is sound or else model will return tons of errors... trust me....
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
 TOOLS = [{
     "toolSpec": {
         "name": "query_rf_measurements",
@@ -68,13 +90,13 @@ TOOLS = [{
     }
 }]
 
-SYSTEM_MSG = (
+SYSTEM_MSG = (    
     "You help RF data analysts. "
     "When the user asks about RF measurements, call query_rf_measurements with start, end, and optional limit. "
     "If the user did not provide dates, ask for them before calling the tool."
 )
 
-# ----------------------------- Utility: RF API call ----------------------------
+# Calls my RF API, but can replace with whatever backend API. Important to note params as these are the minimal required to call API
 def call_rf_api(params: dict) -> dict:
     r = requests.get(
         RF_API_URL,
@@ -88,6 +110,12 @@ def call_rf_api(params: dict) -> dict:
     r.raise_for_status()
     payload = r.json()
 
+# ---------------------------------------------------------------------------------------------------------------------------------
+# This took some debugging. Lots of from original code, but basically, results will come in a nested dictinary and so you need to
+# unpack the dictionary list and get only the contents of the body so model can read it. Use print if you have errors with response
+# or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream to correct again.
+# ---------------------------------------------------------------------------------------------------------------------------------
+    
     if isinstance(payload, dict) and "results" in payload:
         return payload
 
@@ -104,7 +132,8 @@ def call_rf_api(params: dict) -> dict:
 
     return {"raw": payload}
 
-# ------------------------ Helpers: content & file handling ---------------------
+# Helps model understand differnt image formats as i added option for images and whatnot. Not all models understand images btw. 
+
 IMAGE_MIME_TO_FORMAT = {
     "image/png": "png",
     "image/jpeg": "jpeg",
@@ -115,10 +144,13 @@ IMAGE_MIME_TO_FORMAT = {
 
 def build_user_content(text: str, files: list, model_id: str):
     """
-    Build Converse 'content' array for a user turn.
+    (Streamlit doesn't like triple quotes unless inside function like this so that's why 
+    I have to use other comment styles above btw i.e. #---#). Plus I think above looks cooler.
+    Build Converse 'content' array for a user turn (AWS terms not mine)
     - Always includes the text (if provided).
-    - If the model is vision-capable, include supported images inline.
-    - Unsupported files are ignored for the model, but we'll preview them in the UI.
+    - If the model is vision-capable (able to see images), include supported images inline.
+    - Unsupported files are ignored for the model, but we can make it previewable in the UI.
+    
     """
     content = []
     if text:
@@ -128,11 +160,11 @@ def build_user_content(text: str, files: list, model_id: str):
         return content
 
     if not VISION_CAPABLE.get(model_id, False):
-        # Text-only: skip attachments for the API call
+        # Text-only: skips attachments for the API call
         st.info("Selected model is text-only; attached files will be ignored by the model.")
         return content
 
-    # Add supported images as inline image parts
+    # Add supported images as inline image parts. This may need some debugging down the line, but not priority now.
     for f in files:
         mime = getattr(f, "type", None) or ""
         if mime in IMAGE_MIME_TO_FORMAT:
@@ -150,27 +182,33 @@ def build_user_content(text: str, files: list, model_id: str):
 
     return content
 
-# -------------------------- Converse (tools-enabled) ---------------------------
+# This adds in session for keeping track of files, what was said, etc. Still neeeds testing so...
 def converse_with_tools(user_text: str, files=None, history=None):
     if history is None:
         history = []
     files = files or []
 
-    # Inject "system" guidance as an assistant message (Converse does not support role=system)
+    # You will need to refer to Converse API formatting to understand this. Basically you have to define what role
+    # is taking place based on documentation. Will add docs later, but just google converse API docs & you;ll get it.
     messages = [{"role": "assistant", "content": [{"text": SYSTEM_MSG}]}]
     messages.extend(history)
 
     user_content = build_user_content(user_text, files, model_id)
     messages.append({"role": "user", "content": user_content})
-
-    # Round 1: allow tool calling
+   
+    #------------------------Round 1 for tool calls---------------------------------------------------------------------
+    # Sets to allow tool calling with converse API and all the cool doo dads the kids are using these days like tokens
+    # temp, etc. This can be tweaked later if PM wants certain responses back in certain form. 
+    #-------------------------------------------------------------------------------------------------------------------
+    
     resp = brt.converse(
         modelId=model_id,
         toolConfig={"tools": TOOLS},
         messages=messages,
         inferenceConfig={"temperature": 0, "topP": 1, "maxTokens": 1024},
     )
-
+    # Sets up for adding all tools we willl need to add for different sensors 
+    # Right now we only have one so it will just use query_measurements based on how we defined it in TOOLS variable (up top)
     out_msg = resp.get("output", {}).get("message", {}) or {}
     out_content = out_msg.get("content", []) or []
     tool_uses = [c for c in out_content if "toolUse" in c]
@@ -200,7 +238,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
                 }],
             })
 
-            # Round 2: final answer after tool
+            # Round 2: final answer after using tools and logic
             resp2 = brt.converse(
                 modelId=model_id,
                 toolConfig={"tools": TOOLS},
@@ -226,16 +264,16 @@ for turn in st.session_state.chat_log:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-# --------------------------------- Chat input ---------------------------------
-# New widget: supports text + optional file(s)
+# --------------------------------- Chat input section!!!------------------------------------
+# New widget test: supports text + optional file(s)
 prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True)
 
-# Handle a submitted chat input
+# Handles the submitted chat input/prompt
 if prompt:
     text = getattr(prompt, "text", "") if prompt else ""
     files = prompt.get("files", []) if isinstance(prompt, dict) else []
 
-    # Echo user turn in UI (text + previews)
+    # Shows user turn in UI widget (text + previews)
     with st.chat_message("user"):
         if text:
             st.markdown(text)
@@ -248,7 +286,7 @@ if prompt:
                 else:
                     st.write(f"📎 {name} ({mime or 'unknown type'})")
 
-    # Run tools-enabled Converse
+    # Run the "tools-enabled" Converse version with session history and file input etc. 
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
             try:
@@ -260,3 +298,4 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
