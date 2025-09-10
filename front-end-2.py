@@ -288,7 +288,7 @@ if prompt:
 
     # Run the "tools-enabled" Converse version with session history and file input etc. 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
+        with st.spinner("Thinking… I think I got this tho..."):
             try:
                 answer, new_history = converse_with_tools(text, files=files, history=st.session_state.history)
                 st.markdown(answer)
@@ -298,4 +298,5 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
