@@ -128,7 +128,7 @@ def converse_with_tools(user_text: str, history=None):
     if history is None:
         history = []
 
-    messages = [{"role": "system", "content": [{"text": SYSTEM_MSG}]}]
+    messages = [{"role": "assistant", "content": [{"text": SYSTEM_MSG}]}]
     messages.extend(history)
     messages.append({"role": "user", "content": [{"text": user_text}]})
 
@@ -195,4 +195,5 @@ if st.button("Ask (tools enabled)"):
                 st.markdown(answer)
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
