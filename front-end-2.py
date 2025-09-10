@@ -53,15 +53,15 @@ region = (st.secrets.get("aws", {}).get("region")
 
 access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
 secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
-session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN")
+#session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
 
 if access_key and secret_key:
     brt = boto3.client(
         "bedrock-runtime",
         region_name=region,
         aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        aws_session_token=session_token
+        aws_secret_access_key=secret_key
+        #aws_session_token=session_token
     )
 else:
     brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
@@ -298,6 +298,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
