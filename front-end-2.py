@@ -43,9 +43,6 @@ prompt = st.text_area("Enter your prompt:")
 
 # ---- Bedrock client (region pulled from your AWS config/role; override if needed) ----
 BEDROCK_REGION = "us-east-1"
-brt =import os
-import boto3
-import streamlit as st
 
 # Prefer secrets; fall back to env/profile if not present
 region = (st.secrets.get("aws", {}).get("region")
