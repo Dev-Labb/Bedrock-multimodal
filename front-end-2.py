@@ -41,7 +41,7 @@ MODELS = {
 VISION_CAPABLE = {
     "anthropic.claude-3-5-sonnet-20240620-v1:0": True,
     "amazon.nova-micro-v1:0": True,
-    "meta.llama3-2-1b-instruct-v1:0": False,
+    #"meta.llama3-2-1b-instruct-v1:0": False,
 }
 
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
