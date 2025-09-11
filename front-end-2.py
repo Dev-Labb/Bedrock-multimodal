@@ -35,8 +35,8 @@ MODELS = {
     #"Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
-# Which of the above are multimodal meaning they can use proper API. Other (llama for now) doesn't support what we're going with now. 
-# Keeping for potential down the line testing though...
+# Which of the above are multimodal meaning they can use proper API. Meta Llamaa doesn't support what we're going with for now.
+# Commented Llama out, but keeping for potential down the line testing though...
 
 VISION_CAPABLE = {
     "anthropic.claude-3-5-sonnet-20240620-v1:0": True,
@@ -300,6 +300,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
