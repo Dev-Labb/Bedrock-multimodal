@@ -7,25 +7,27 @@ import pandas as pd
 from datetime import date
 import boto3
 
+
+st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
+st.title("🧠 Multi-Modal Bedrock Test")
+
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
 # These are my API endpoints to API Gateway.Currently, all API url's are under the "testing" stage in API Gateway.
 # I plan to change staging names to dev/test/prod which means these will these two variables will likely change 
 # to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
 # ----------------------------------------------------------------------------------------------------------------
-st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
-st.title("🧠 Multi-Modal Bedrock Test")
+
+MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
+RF_API_URL    = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
-# WARNING!!!!: THIS IS NOW HERE FOR LEGACY CODE PURPOSES. I AM NOW USING CONVERSE API AND WILL NEED TO CONVERT TO CONVERSE STREAM
+# WARNING!!!!: I AM NOW USING CONVERSE API AND WILL NEED TO CONVERT TO CONVERSE STREAM DOWN THE LINE! 
 # Model options - These must match keys in AWS Lambda's "ALLOWED_MODELS" varible. For more context please refer
 # to the coinciding lamba function. The llama3 model is currently broken because of the format I used to invoke
 # the model currently. My plan currrently is to change to models/formats that use AWS Converse API More info can
 # be found here: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html  
 # ---------------------------------------------------------------------------------------------------------------------------------
-
-MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
-RF_API_URL    = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
 
 MODELS = {
     "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -298,6 +300,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
