@@ -32,7 +32,7 @@ RF_API_URL    = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/
 MODELS = {
     "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "Amazon Nova Micro": "amazon.nova-micro-v1:0",
-    "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
+    #"Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
 # Which of the above are multimodal meaning they can use proper API. Other (llama for now) doesn't support what we're going with now. 
@@ -41,7 +41,7 @@ MODELS = {
 VISION_CAPABLE = {
     "anthropic.claude-3-5-sonnet-20240620-v1:0": True,
     "amazon.nova-micro-v1:0": True,
-    #"meta.llama3-2-1b-instruct-v1:0": False,
+    "meta.llama3-2-1b-instruct-v1:0": False,
 }
 
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
@@ -300,6 +300,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
