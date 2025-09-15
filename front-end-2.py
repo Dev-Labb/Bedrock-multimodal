@@ -70,7 +70,7 @@ else:
 
 # --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
 # This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
-# we copy the OpenAPI Json file and plug it in as a tool. This will enable model to use API when it needs to based on intstructions
+# we copy the OpenAPI Json schema and plug it in as a tool. This will enable model to use API when it needs to based on intstructions
 # you give it in System_MSG aka instructions to model system. Make sure this is sound or else model will return tons of errors... trust me....
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -112,11 +112,12 @@ def call_rf_api(params: dict) -> dict:
     r.raise_for_status()
     payload = r.json()
 
-# ---------------------------------------------------------------------------------------------------------------------------------
-# This took some debugging. Lots of from original code, but basically, results will come in a nested dictinary and so you need to
-# unpack the dictionary list and get only the contents of the body so model can read it. Use print if you have errors with response
-# or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream to correct again.
-# ---------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------------
+# This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
+# unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
+# Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
+# to correct again. It is very useful to see raw responses for debugging purposes.
+# --------------------------------------------------------------------------------------------------------------------------------------------------
     
     if isinstance(payload, dict) and "results" in payload:
         return payload
@@ -134,7 +135,7 @@ def call_rf_api(params: dict) -> dict:
 
     return {"raw": payload}
 
-# Helps model understand differnt image formats as i added option for images and whatnot. Not all models understand images btw. 
+# Helps model understand differnt image formats as i added option for images and whatnot. Not all models understand images btw. I listed ones that do at top under "VISION_CAPABLE."
 
 IMAGE_MIME_TO_FORMAT = {
     "image/png": "png",
@@ -147,7 +148,7 @@ IMAGE_MIME_TO_FORMAT = {
 def build_user_content(text: str, files: list, model_id: str):
     """
     (Streamlit doesn't like triple quotes unless inside function like this so that's why 
-    I have to use other comment styles above btw i.e. #---#). Plus I think above looks cooler.
+    I have to use other comment styles above btw i.e. #---#). Plus I think above looks cooler/cleaner.
     Build Converse 'content' array for a user turn (AWS terms not mine)
     - Always includes the text (if provided).
     - If the model is vision-capable (able to see images), include supported images inline.
@@ -200,7 +201,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
    
     #------------------------Round 1 for tool calls---------------------------------------------------------------------
     # Sets to allow tool calling with converse API and all the cool doo dads the kids are using these days like tokens
-    # temp, etc. This can be tweaked later if PM wants certain responses back in certain form. 
+    # temp, etc. This can be tweaked later if PM wants certain responses back in certain form/tone/etc.
     #-------------------------------------------------------------------------------------------------------------------
     
     resp = brt.converse(
@@ -240,7 +241,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
                 }],
             })
 
-            # Round 2: final answer after using tools and logic
+            # Round 2: final answer after using tools and logic/instructions we giave it
             resp2 = brt.converse(
                 modelId=model_id,
                 toolConfig={"tools": TOOLS},
@@ -255,7 +256,9 @@ def converse_with_tools(user_text: str, files=None, history=None):
     final_text = "".join(c.get("text", "") for c in out_content if "text" in c)
     return final_text or "_No response_", messages
 
-# ------------------------------- Chat UI state --------------------------------
+# -------------------Setting up Chat Ui/user sessions (Still in beta seems to work but..)---------------------------------
+# As stated above this allows sessions so model can keep track of what was asked before etc. streamlit has it's docs on it
+# ------------------------------------------------------------------------------------------------------------------------
 if "history" not in st.session_state:
     st.session_state.history = []  # store prior Converse-format messages (excluding the injected SYSTEM_MSG)
 if "chat_log" not in st.session_state:
@@ -266,11 +269,11 @@ for turn in st.session_state.chat_log:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-# --------------------------------- Chat input section!!!------------------------------------
-# New widget test: supports text + optional file(s)
+# --------------------------------- Chat input section---------------------------------------
+# New widget test - supports text + optional file(s) now, but file ingestion needs testing..
 prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True)
 
-# Handles the submitted chat input/prompt
+# Handles the submitted chat input/prompt from end users for both files and text.
 if prompt:
     text = getattr(prompt, "text", "") if prompt else ""
     files = prompt.get("files", []) if isinstance(prompt, dict) else []
@@ -288,9 +291,9 @@ if prompt:
                 else:
                     st.write(f"📎 {name} ({mime or 'unknown type'})")
 
-    # Run the "tools-enabled" Converse version with session history and file input etc. 
+    # Run the now "tools-enabled" Converse version with session history and file input etc. 
     with st.chat_message("assistant"):
-        with st.spinner("I'm Thinking… Saba stop RUSHING ME DAMN!....:("):
+        with st.spinner("Thinking…"):
             try:
                 answer, new_history = converse_with_tools(text, files=files, history=st.session_state.history)
                 st.markdown(answer)
@@ -300,6 +303,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
