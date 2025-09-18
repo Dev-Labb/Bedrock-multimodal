@@ -10,6 +10,7 @@ import boto3
 
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
+st.write("debug mode enabled. I switched parameters so we can trace more of how model is thinking to come up with it's results).
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -303,6 +304,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
