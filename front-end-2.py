@@ -194,7 +194,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
 
     # You will need to refer to Converse API formatting to understand this. Basically you have to define what role
     # is taking place based on documentation. Will add docs later, but just google converse API docs & you;ll get it.
-    messages = [{"role": "assistant", "content": [{"text": SYSTEM_MSG}]}]
+    messages = [{"role": "user", "content": [{"text": SYSTEM_MSG}]}]
     messages.extend(history)
 
     user_content = build_user_content(user_text, files, model_id)
@@ -304,6 +304,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
