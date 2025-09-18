@@ -10,7 +10,6 @@ import boto3
 
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
-st.write("DEBUG MODE ENABLED. (I switched parameters so we can trace more of how model is thinking to come up with it's results)")
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -97,6 +96,7 @@ SYSTEM_MSG = (
     "You help RF data analysts. "
     "When the user asks about RF measurements, call query_rf_measurements with start, end, and optional limit. "
     "If the user did not provide dates, ask for them before calling the tool."
+    "Otherwise, if the user asks questions that aren't rf related answer them to the best of your ability." #Can coomment this out if we want to filter to only rf related
 )
 
 # Calls my RF API, but can replace with whatever backend API. Important to note params as these are the minimal required to call API
@@ -304,6 +304,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
