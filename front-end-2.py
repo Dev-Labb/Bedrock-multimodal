@@ -18,8 +18,8 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
 # ----------------------------------------------------------------------------------------------------------------
 
-MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
-RF_API_URL    = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate/measurements"
+MODEL_API_URL = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/generate"
+RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
 # WARNING!!!!: I AM NOW USING CONVERSE API AND WILL NEED TO CONVERT TO CONVERSE STREAM DOWN THE LINE! 
@@ -304,6 +304,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
