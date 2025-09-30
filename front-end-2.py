@@ -55,7 +55,7 @@ region = (st.secrets.get("aws", {}).get("region")
 
 access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
 secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
-#session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
+session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
 
 if access_key and secret_key:
     brt = boto3.client(
@@ -304,6 +304,7 @@ if prompt:
                 st.session_state.chat_log.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
+
 
 
 
