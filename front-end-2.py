@@ -362,9 +362,9 @@ st.header("📡 RF Data Query to database")
 col1, col2, col3 = st.columns(3)
 with col1:
     # Using date objects for clean defaults that Streamlit expects
-    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2025, 9, 30))
+    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2025, 9, 5))
 with col2:
-    end_date = st.date_input("End Date", value=date(2023, 5, 5), max_value=date(2025, 9, 30))
+    end_date = st.date_input("End Date", value=date(2023, 5, 5), max_value=date(2025, 5, 5))
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=500, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -439,4 +439,5 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
 
