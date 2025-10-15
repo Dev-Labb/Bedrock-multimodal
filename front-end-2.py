@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import date
 import boto3
 
+
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
 
@@ -18,6 +19,7 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # ----------------------------------------------------------------------------------------------------------------
 
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
+# ⬇️ UPDATED to new DB API in us-gov-west-1
 RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
@@ -49,30 +51,22 @@ model_id = MODELS[model_choice]
 # This is for storing my secrets in order to use AWS resources securely. 
 # No idea yet how they will do it on unclass and how PM will prefer in other location yet.
 region = (st.secrets.get("aws", {}).get("region")
-          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-gov-west-1"))
+          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
 
 access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
 secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
 # session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
 
-# ---- Best-effort Bedrock client: GovCloud often doesn't have Bedrock; don't crash if unavailable ----
-brt = None
 if access_key and secret_key:
-    try:
-        brt = boto3.client(
-            "bedrock-runtime",
-            region_name=region,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key
-            # aws_session_token=session_token
-        )
-    except Exception:
-        brt = None
+    brt = boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
+        # aws_session_token=session_token
+    )
 else:
-    try:
-        brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
-    except Exception:
-        brt = None
+    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
 
 # --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
 # This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
@@ -86,11 +80,17 @@ TOOLS = [{
         "description": (
             "Query RF measurement data via API Gateway. "
             "Parameters: start (YYYY-MM-DD), end (YYYY-MM-DD), limit (integer). "
-            "Backend returns columns such as site, uuid, channel, classification, collect_id, telemetry_id, "
-            "carrier_frequency, frequency_band, collection_mode, bandwidth, polarity, carrier_snr, "
-            "relative_carrier_power, relative_noise_floor, confidence, frequency_shift, peak, "
-            "pointing_information_azimuth/elevation/polarization/antenna_name, signal_* fields, "
-            "satellite_* fields, measurement_timestamp, insert_timestamp, id."
+            "Backend returns columns such as: "
+            "site, uuid, channel, classification, collect_id, telemetry_id, "
+            "carrier_frequency, frequency_band, collection_mode, bandwidth, polarity, "
+            "carrier_snr, relative_carrier_power, relative_noise_floor, confidence, frequency_shift, peak, "
+            "pointing_information_azimuth, pointing_information_elevation, pointing_information_polarization, "
+            "pointing_information_antenna_name, signal_is_measured_signal, signal_is_spread_signal, signal_uuid, "
+            "signal_baud_rate, signal_subcarrier_frequency, signal_subcarrier_snr, signal_confidence, "
+            "signal_detection_status, signal_id, signal_measured_telemetry_id, signal_chip_rate, signal_code_taps, "
+            "signal_code_fill, signal_code_length, signal_pn_order, satellite_scc, satellite_classification, "
+            "satellite_name, satellite_international_designator, satellite_launch_date, satellite_object_type, "
+            "satellite_owner_code, satellite_owner_name, satellite_uuid, measurement_timestamp, id."
         ),
         "inputSchema": {
             "json": {
@@ -218,11 +218,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
     # Sets to allow tool calling with converse API and all the cool doo dads the kids are using these days like tokens
     # temp, etc. This can be tweaked later if PM wants certain responses back in certain form/tone/etc.
     #-------------------------------------------------------------------------------------------------------------------
-    if brt is None:
-        # If Bedrock is not available in this region/account (GovCloud), return a friendly message
-        return ("_Bedrock is not available/configured in this environment. "
-                "You can still use the RF Data Query panel below to fetch data directly._", messages)
-
+    
     resp = brt.converse(
         modelId=model_id,
         toolConfig={"tools": TOOLS},
@@ -275,6 +271,7 @@ def converse_with_tools(user_text: str, files=None, history=None):
     final_text = "".join(c.get("text", "") for c in out_content if "text" in c)
     return final_text or "_No response_", messages
 
+
 # -------------------Setting up Chat Ui/user sessions (Still in beta seems to work but..)---------------------------------
 # As stated above this allows sessions so model can keep track of what was asked before etc. streamlit has it's docs on it
 # ------------------------------------------------------------------------------------------------------------------------
@@ -297,8 +294,8 @@ def _order_columns_for_display(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     preferred = [
+        "measurement_timestamp",  # key timestamp in new schema
         "site", "uuid", "channel", "classification", "collect_id", "telemetry_id",
-        "measurement_timestamp", "insert_timestamp",
         "carrier_frequency", "frequency_band", "collection_mode", "bandwidth", "polarity",
         "carrier_snr", "relative_carrier_power", "relative_noise_floor", "confidence",
         "frequency_shift", "peak",
@@ -349,6 +346,7 @@ if prompt:
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
 
+
 # -----------------------------------------------------------------------------------------------------------
 # This handles the RF Data Queries to the DB. Allows dynamic queries with 
 # start/end/limit parmeters to call the Postgres API via my lambda fucntion/api gateway
@@ -362,9 +360,9 @@ st.header("📡 RF Data Query to database")
 col1, col2, col3 = st.columns(3)
 with col1:
     # Using date objects for clean defaults that Streamlit expects
-    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2023, 5, 6))
+    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2023, 5, 5))
 with col2:
-    end_date = st.date_input("End Date", value=date(2023, 5, 5), max_value=date(2023, 5, 6))
+    end_date = st.date_input("End Date", value=date(2023, 5, 6))
 with col3:
     limit = st.number_input("Limit", min_value=1, max_value=500, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
@@ -377,7 +375,7 @@ if st.button("Grab RF Data"):
             end_str = end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)
 
             params = {"start": start_str, "end": end_str, "limit": int(limit)}
-            response = requests.get(RF_API_URL, params=params)
+            response = requests.get(RF_API_URL, params=params, timeout=60)
 
             # 🔎 Debugging visibility
             st.write("🔎 Params sent:", params)
@@ -410,9 +408,11 @@ if st.button("Grab RF Data"):
                     df = pd.DataFrame(results)
 
                     # Convert new timestamp columns if present and sort by measurement time
-                    for ts_col in ["measurement_timestamp", "insert_timestamp"]:
-                        if ts_col in df.columns:
-                            df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
+                    if "measurement_timestamp" in df.columns:
+                        df["measurement_timestamp"] = pd.to_datetime(df["measurement_timestamp"], errors="coerce")
+
+                    if "insert_timestamp" in df.columns:
+                        df["insert_timestamp"] = pd.to_datetime(df["insert_timestamp"], errors="coerce")
 
                     if "measurement_timestamp" in df.columns:
                         df = df.sort_values(by="measurement_timestamp", ascending=True)
@@ -439,6 +439,3 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
-
-
-
