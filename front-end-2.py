@@ -7,7 +7,6 @@ import pandas as pd
 from datetime import date
 import boto3
 
-
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
 
@@ -32,7 +31,7 @@ RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/
 MODELS = {
     "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "Amazon Nova Micro": "amazon.nova-micro-v1:0",
-    #"Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
+    # "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
 # Which of the above are multimodal meaning they can use proper API. Meta Llamaa doesn't support what we're going with for now.
@@ -47,26 +46,33 @@ VISION_CAPABLE = {
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 model_id = MODELS[model_choice]
 
-
 # This is for storing my secrets in order to use AWS resources securely. 
 # No idea yet how they will do it on unclass and how PM will prefer in other location yet.
 region = (st.secrets.get("aws", {}).get("region")
-          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
+          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-gov-west-1"))
 
 access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
 secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
-session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
+# session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
 
+# ---- Best-effort Bedrock client: GovCloud often doesn't have Bedrock; don't crash if unavailable ----
+brt = None
 if access_key and secret_key:
-    brt = boto3.client(
-        "bedrock-runtime",
-        region_name=region,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key
-        #aws_session_token=session_token
-    )
+    try:
+        brt = boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key
+            # aws_session_token=session_token
+        )
+    except Exception:
+        brt = None
 else:
-    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
+    try:
+        brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
+    except Exception:
+        brt = None
 
 # --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
 # This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
@@ -77,7 +83,15 @@ else:
 TOOLS = [{
     "toolSpec": {
         "name": "query_rf_measurements",
-        "description": "Query RF measurement data via API Gateway.",
+        "description": (
+            "Query RF measurement data via API Gateway. "
+            "Parameters: start (YYYY-MM-DD), end (YYYY-MM-DD), limit (integer). "
+            "Backend returns columns such as site, uuid, channel, classification, collect_id, telemetry_id, "
+            "carrier_frequency, frequency_band, collection_mode, bandwidth, polarity, carrier_snr, "
+            "relative_carrier_power, relative_noise_floor, confidence, frequency_shift, peak, "
+            "pointing_information_azimuth/elevation/polarization/antenna_name, signal_* fields, "
+            "satellite_* fields, measurement_timestamp, insert_timestamp, id."
+        ),
         "inputSchema": {
             "json": {
                 "type": "object",
@@ -113,12 +127,12 @@ def call_rf_api(params: dict) -> dict:
     r.raise_for_status()
     payload = r.json()
 
-# --------------------------------------------------------------------------------------------------------------------------------------------------
-# This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
-# unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
-# Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
-# to correct again. It is very useful to see raw responses for debugging purposes.
-# --------------------------------------------------------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------------------------------------------------------
+    # This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
+    # unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
+    # Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
+    # to correct again. It is very useful to see raw responses for debugging purposes.
+    # --------------------------------------------------------------------------------------------------------------------------------------------------
     
     if isinstance(payload, dict) and "results" in payload:
         return payload
@@ -204,7 +218,11 @@ def converse_with_tools(user_text: str, files=None, history=None):
     # Sets to allow tool calling with converse API and all the cool doo dads the kids are using these days like tokens
     # temp, etc. This can be tweaked later if PM wants certain responses back in certain form/tone/etc.
     #-------------------------------------------------------------------------------------------------------------------
-    
+    if brt is None:
+        # If Bedrock is not available in this region/account (GovCloud), return a friendly message
+        return ("_Bedrock is not available/configured in this environment. "
+                "You can still use the RF Data Query panel below to fetch data directly._", messages)
+
     resp = brt.converse(
         modelId=model_id,
         toolConfig={"tools": TOOLS},
@@ -274,6 +292,32 @@ for turn in st.session_state.chat_log:
 # New widget test - supports text + optional file(s) now, but file ingestion needs testing..
 prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True)
 
+# ---------- Small helper to pretty-order columns for the new table ----------
+def _order_columns_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    preferred = [
+        "site", "uuid", "channel", "classification", "collect_id", "telemetry_id",
+        "measurement_timestamp", "insert_timestamp",
+        "carrier_frequency", "frequency_band", "collection_mode", "bandwidth", "polarity",
+        "carrier_snr", "relative_carrier_power", "relative_noise_floor", "confidence",
+        "frequency_shift", "peak",
+        "pointing_information_azimuth", "pointing_information_elevation",
+        "pointing_information_polarization", "pointing_information_antenna_name",
+        "signal_is_measured_signal", "signal_is_spread_signal", "signal_uuid",
+        "signal_baud_rate", "signal_subcarrier_frequency", "signal_subcarrier_snr",
+        "signal_confidence", "signal_detection_status", "signal_id",
+        "signal_measured_telemetry_id", "signal_chip_rate", "signal_code_taps",
+        "signal_code_fill", "signal_code_length", "signal_pn_order",
+        "satellite_scc", "satellite_classification", "satellite_name",
+        "satellite_international_designator", "satellite_launch_date", "satellite_object_type",
+        "satellite_owner_code", "satellite_owner_name", "satellite_uuid",
+        "id"
+    ]
+    cols = [c for c in preferred if c in df.columns]
+    rest = [c for c in df.columns if c not in cols]
+    return df[cols + rest] if cols else df
+
 # Handles the submitted chat input/prompt from end users for both files and text.
 if prompt:
     text = getattr(prompt, "text", "") if prompt else ""
@@ -305,23 +349,93 @@ if prompt:
             except Exception as e:
                 st.error(f"Tools run failed: {e}")
 
+# -----------------------------------------------------------------------------------------------------------
+# This handles the RF Data Queries to the DB. Allows dynamic queries with 
+# start/end/limit parmeters to call the Postgres API via my lambda fucntion/api gateway
+# combo and return results. Looked at stremalit docs to help me set up.
 
+###Note: Need to change to use datetime ISO format. To do so I need to add in correct parmeter after each input.
+# This is currently why you'll get the wrong data back from database calls.### <--- Will update after fix.
+#--------------------------------------------------------------------------------------------------------------
+st.header("📡 RF Data Query to database")
 
+col1, col2, col3 = st.columns(3)
+with col1:
+    # Using date objects for clean defaults that Streamlit expects
+    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2023, 5, 5))
+with col2:
+    end_date = st.date_input("End Date", value=date(2023, 5, 6), max_value=date(2023, 6, 11))
+with col3:
+    limit = st.number_input("Limit", min_value=1, max_value=500, value=10) #setting defaults for limits, but want to hard code it in lambda too.
 
+# Handles button widget and makes sure query parameters are passed to API
+if st.button("Grab RF Data"):
+    with st.spinner("Grabbing RF measurements..."):
+        try:
+            # Streamlit date_input returns date objects; stringify as YYYY-MM-DD for the API
+            start_str = start_date.strftime("%Y-%m-%d") if hasattr(start_date, "strftime") else str(start_date)
+            end_str = end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)
 
+            params = {"start": start_str, "end": end_str, "limit": int(limit)}
+            response = requests.get(RF_API_URL, params=params)
 
+            # 🔎 Debugging visibility
+            st.write("🔎 Params sent:", params)
+            # st.write("🔍 Raw RF API response:", response.text)
 
+            if response.status_code == 200:
+                try:
+                    payload = response.json()
 
+                    # Support BOTH shapes:
+                    # New proxy response: {"results":[...], "count":N}
+                    # Old non-proxy-wrapped: {"statusCode":200,"body":"{\"results\":...}"}
+                    if isinstance(payload, dict) and "results" in payload:
+                        results = payload.get("results", [])
+                        count = payload.get("count", len(results))
+                    elif isinstance(payload, dict) and "body" in payload:
+                        body_data = json.loads(payload["body"])
+                        if isinstance(body_data, dict) and "results" in body_data:
+                            results = body_data.get("results", [])
+                            count = body_data.get("count", len(results))
+                        elif isinstance(body_data, list):
+                            results = body_data
+                            count = len(results)
+                        else:
+                            raise ValueError("Unexpected body structure in legacy response.")
+                    else:
+                        raise ValueError("Unexpected response JSON structure from API.")
 
+                    # Convert the parsed data (list of dictionaries) into a DataFrame
+                    df = pd.DataFrame(results)
 
+                    # Convert new timestamp columns if present and sort by measurement time
+                    for ts_col in ["measurement_timestamp", "insert_timestamp"]:
+                        if ts_col in df.columns:
+                            df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
 
+                    if "measurement_timestamp" in df.columns:
+                        df = df.sort_values(by="measurement_timestamp", ascending=True)
 
+                    # Pretty-order columns for readability with new schema
+                    df = _order_columns_for_display(df)
 
+                    st.success(f"RF Data Results (count={count})")
+                    if not df.empty:
+                        st.dataframe(df)
+                        # Optional CSV download (handy for analysts)
+                        csv = df.to_csv(index=False).encode("utf-8")
+                        st.download_button("Download CSV", data=csv, file_name="rf_measurements.csv", mime="text/csv")
+                    else:
+                        st.info("No rows returned for the selected range.")
 
+                except Exception as parse_err:
+                    st.error("Failed to parse JSON from RF API.")
+                    st.text(f"Error: {parse_err}")
+                    st.code(response.text)
+            else:
+                st.error(f"Error {response.status_code}")
+                st.code(response.text)
 
-
-
-
-
-
-
+        except Exception as e:
+            st.error(f"Request failed: {str(e)}")
