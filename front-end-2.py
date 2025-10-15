@@ -19,7 +19,6 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # ----------------------------------------------------------------------------------------------------------------
 
 MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
-# ⬇️ UPDATED to new DB API in us-gov-west-1
 RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
@@ -439,3 +438,4 @@ if st.button("Grab RF Data"):
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")
+
