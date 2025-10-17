@@ -1,441 +1,378 @@
-import os
+# app.py — RF Pattern‑of‑Life (PoL) Dashboard
+# ----------------------------------------------------------------------------
+# Quick start
+#   1) pip install streamlit pandas numpy requests plotly
+#   2) streamlit run app.py
+#   3) Open http://localhost:8501
+#
+# What this app does
+#   • Load RF measurement data from a CSV upload, an API (optional), or use
+#     generated sample data.
+#   • Build a baseline “Pattern of Life” by hour‑of‑day × frequency band.
+#   • Visualize activity heatmaps and trends.
+#   • Detect changes (anomalies) relative to the baseline using z‑scores.
+#   • Export an anomalies report.
+#
+# Expected columns (your table can include more):
+#   timestamp (datetime), frequency (Hz), signal_strength (dBm), modulation,
+#   bandwidth (kHz or Hz), location, device_type, antenna_type, interference_type
+# ----------------------------------------------------------------------------
+
 import io
 import json
+from datetime import datetime, timedelta, date
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import streamlit as st
-import pandas as pd
-from datetime import date
-import boto3
+
+st.set_page_config(page_title="RF Pattern‑of‑Life Dashboard", page_icon="📡", layout="wide")
+st.title("📡 RF Pattern‑of‑Life (PoL) Dashboard")
+st.caption("Analyze normal RF behavior and highlight changes over time.")
+
+# ---------------------------- Utility functions -----------------------------
+
+@st.cache_data(show_spinner=False)
+def _infer_datetime(s):
+    # Robust timestamp parser
+    return pd.to_datetime(s, errors="coerce")
 
 
-st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
-st.title("🧠 Multi-Modal Bedrock Test")
-
-# ---------------------------------------------------------------------------------------------------------------
-# Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
-# These are my API endpoints to API Gateway.Currently, all API url's are under the "testing" stage in API Gateway.
-# I plan to change staging names to dev/test/prod which means these will these two variables will likely change 
-# to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
-# ----------------------------------------------------------------------------------------------------------------
-
-MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
-RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
-
-# --------------------------------------------------------------------------------------------------------------------------------
-# WARNING!!!!: I AM NOW USING CONVERSE API AND WILL NEED TO CONVERT TO CONVERSE STREAM DOWN THE LINE! 
-# Model options - These must match keys in AWS Lambda's "ALLOWED_MODELS" varible. For more context please refer
-# to the coinciding lamba function. The llama3 model is currently broken because of the format I used to invoke
-# the model currently. My plan currrently is to change to models/formats that use AWS Converse API More info can
-# be found here: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html  
-# ---------------------------------------------------------------------------------------------------------------------------------
-
-MODELS = {
-    "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "Amazon Nova Micro": "amazon.nova-micro-v1:0",
-    # "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
-}
-
-# Which of the above are multimodal meaning they can use proper API. Meta Llamaa doesn't support what we're going with for now.
-# Commented Llama out, but keeping for potential down the line testing though...
-
-VISION_CAPABLE = {
-    "anthropic.claude-3-5-sonnet-20240620-v1:0": True,
-    "amazon.nova-micro-v1:0": True,
-    "meta.llama3-2-1b-instruct-v1:0": False,
-}
-
-model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
-model_id = MODELS[model_choice]
-
-# This is for storing my secrets in order to use AWS resources securely. 
-# No idea yet how they will do it on unclass and how PM will prefer in other location yet.
-region = (st.secrets.get("aws", {}).get("region")
-          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
-
-access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
-secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
-# session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
-
-if access_key and secret_key:
-    brt = boto3.client(
-        "bedrock-runtime",
-        region_name=region,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key
-        # aws_session_token=session_token
-    )
-else:
-    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
-
-# --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
-# This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
-# we copy the OpenAPI Json schema and plug it in as a tool. This will enable model to use API when it needs to based on intstructions
-# you give it in System_MSG aka instructions to model system. Make sure this is sound or else model will return tons of errors... trust me....
-# --------------------------------------------------------------------------------------------------------------------------------------------
-
-TOOLS = [{
-    "toolSpec": {
-        "name": "query_rf_measurements",
-        "description": (
-            "Query RF measurement data via API Gateway. "
-            "Parameters: start (YYYY-MM-DD), end (YYYY-MM-DD), limit (integer). "
-            "Backend returns columns such as: "
-            "site, uuid, channel, classification, collect_id, telemetry_id, "
-            "carrier_frequency, frequency_band, collection_mode, bandwidth, polarity, "
-            "carrier_snr, relative_carrier_power, relative_noise_floor, confidence, frequency_shift, peak, "
-            "pointing_information_azimuth, pointing_information_elevation, pointing_information_polarization, "
-            "pointing_information_antenna_name, signal_is_measured_signal, signal_is_spread_signal, signal_uuid, "
-            "signal_baud_rate, signal_subcarrier_frequency, signal_subcarrier_snr, signal_confidence, "
-            "signal_detection_status, signal_id, signal_measured_telemetry_id, signal_chip_rate, signal_code_taps, "
-            "signal_code_fill, signal_code_length, signal_pn_order, satellite_scc, satellite_classification, "
-            "satellite_name, satellite_international_designator, satellite_launch_date, satellite_object_type, "
-            "satellite_owner_code, satellite_owner_name, satellite_uuid, measurement_timestamp, id."
-        ),
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "start": {"type": "string", "description": "Start date YYYY-MM-DD"},
-                    "end": {"type": "string", "description": "End date YYYY-MM-DD"},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 10}
-                },
-                "required": ["start", "end"]
-            }
-        }
+def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
+    # Make sure minimal columns exist; create if missing
+    defaults = {
+        "frequency": np.nan,
+        "signal_strength": np.nan,
+        "modulation": None,
+        "bandwidth": np.nan,
+        "location": None,
+        "device_type": None,
+        "antenna_type": None,
+        "interference_type": None,
     }
-}]
+    if "timestamp" not in df.columns:
+        raise ValueError("'timestamp' column is required.")
+    df["timestamp"] = _infer_datetime(df["timestamp"])  
+    for c, v in defaults.items():
+        if c not in df.columns:
+            df[c] = v
+    return df
 
-SYSTEM_MSG = (    
-    "You help RF data analysts. "
-    "When the user asks about RF measurements, call query_rf_measurements with start, end, and optional limit. "
-    "If the user did not provide dates, ask for them before calling the tool."
-    "Otherwise, if the user asks questions that aren't rf related answer them to the best of your ability." #Can coomment this out if we want to filter to only rf related
-)
 
-# Calls my RF API, but can replace with whatever backend API. Important to note params as these are the minimal required to call API
-def call_rf_api(params: dict) -> dict:
-    r = requests.get(
-        RF_API_URL,
-        params={
-            "start": params.get("start"),
-            "end": params.get("end"),
-            "limit": params.get("limit", 10),
-        },
-        timeout=30,
-    )
-    r.raise_for_status()
-    payload = r.json()
+def _bucket_freq_hz_to_band(freq_hz: float) -> str:
+    if pd.isna(freq_hz):
+        return "Unknown"
+    f = float(freq_hz)
+    # Simple buckets — tweak as needed for your environment
+    if 2.3e9 <= f <= 2.5e9:
+        return "2.4 GHz (Wi‑Fi/BT)"
+    if 5.15e9 <= f <= 5.85e9:
+        return "5 GHz (Wi‑Fi)"
+    if 868e6 <= f <= 928e6:
+        return "900 MHz (ISM)"
+    if 400e6 <= f <= 470e6:
+        return "UHF 400–470 MHz"
+    if 700e6 <= f <= 900e6:
+        return "700–900 MHz (Cell)"
+    if 1.8e9 <= f <= 2.2e9:
+        return "1.8–2.2 GHz (Cell)"
+    if 3.3e9 <= f <= 4.2e9:
+        return "3.3–4.2 GHz"
+    if 24e9 <= f <= 30e9:
+        return "27 GHz (mmWave)"
+    return "Other"
 
-    # --------------------------------------------------------------------------------------------------------------------------------------------------
-    # This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
-    # unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
-    # Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
-    # to correct again. It is very useful to see raw responses for debugging purposes.
-    # --------------------------------------------------------------------------------------------------------------------------------------------------
-    
-    if isinstance(payload, dict) and "results" in payload:
-        return payload
 
-    if isinstance(payload, dict) and "body" in payload:
+def _prep(df: pd.DataFrame) -> pd.DataFrame:
+    df = _ensure_columns(df.copy())
+    df = df.dropna(subset=["timestamp"])  # remove rows with bad timestamps
+    df = df.sort_values("timestamp")
+
+    # Derive features
+    df["hour"] = df["timestamp"].dt.hour
+    df["dow"] = df["timestamp"].dt.dayofweek  # Monday=0
+    df["date"] = df["timestamp"].dt.date
+    df["week"] = df["timestamp"].dt.isocalendar().week.astype(int)
+    df["year"] = df["timestamp"].dt.year
+    df["freq_band"] = df["frequency"].apply(_bucket_freq_hz_to_band)
+    df["count_one"] = 1  # helper for counts
+
+    return df
+
+
+def _make_sample(n_days: int = 10, seed: int = 7) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    base = datetime.now() - timedelta(days=n_days)
+    rows = []
+    # Simulate a facility with daytime Wi‑Fi and sparse night activity.
+    for d in range(n_days):
+        for h in range(24):
+            num = rng.integers(40, 120) if 8 <= h <= 18 else rng.integers(0, 8)
+            for _ in range(int(num)):
+                t = base + timedelta(days=d, hours=h, minutes=int(rng.integers(0, 60)))
+                band_choice = rng.choice([
+                    (2.45e9, "OFDM", -68, "Site‑A", "WiFi‑Router"),
+                    (915e6, "FSK", -82, "Site‑A", "SensorNode"),
+                    (5.3e9, "OFDM", -71, "Site‑A", "WiFi‑AP"),
+                ], p=[0.6, 0.2, 0.2])
+                f, mod, strength, loc, dev = band_choice
+                # Add small noise
+                strength = strength + rng.normal(0, 3)
+                rows.append({
+                    "timestamp": t,
+                    "frequency": f,
+                    "signal_strength": strength,
+                    "modulation": mod,
+                    "bandwidth": 20_000_000,
+                    "location": loc,
+                    "device_type": dev,
+                    "antenna_type": "Omni",
+                    "interference_type": None,
+                })
+    # Inject an anomaly: strong late‑night Wi‑Fi on last two nights
+    for h in [0, 1, 2]:
+        for _ in range(400):
+            t = base + timedelta(days=n_days-1, hours=h, minutes=int(rng.integers(0, 60)))
+            rows.append({
+                "timestamp": t,
+                "frequency": 2.45e9,
+                "signal_strength": -60 + rng.normal(0, 2),
+                "modulation": "OFDM",
+                "bandwidth": 20_000_000,
+                "location": "Site‑A",
+                "device_type": "WiFi‑AP",
+                "antenna_type": "Omni",
+                "interference_type": None,
+            })
+    df = pd.DataFrame(rows)
+    return df
+
+
+def _build_baseline(df: pd.DataFrame, baseline_range: tuple[date, date], metric: str = "count"):
+    start_d, end_d = baseline_range
+    base = df[(df["date"] >= start_d) & (df["date"] <= end_d)]
+    if base.empty:
+        return base, None
+
+    if metric == "count":
+        agg = base.groupby(["hour", "freq_band"], as_index=False)["count_one"].sum()
+        agg = agg.rename(columns={"count_one": "value"})
+    else:  # strength
+        agg = base.groupby(["hour", "freq_band"], as_index=False)["signal_strength"].mean()
+        agg = agg.rename(columns={"signal_strength": "value"})
+
+    # Mean and std per (hour, band)
+    stats = agg.groupby(["hour", "freq_band"]).agg(mean=("value", "mean"), std=("value", "std")).reset_index()
+    return base, stats
+
+
+def _score_period(df: pd.DataFrame, period_range: tuple[date, date], stats: pd.DataFrame, metric: str = "count"):
+    start_d, end_d = period_range
+    cur = df[(df["date"] >= start_d) & (df["date"] <= end_d)]
+    if cur.empty or stats is None or stats.empty:
+        return cur, pd.DataFrame()
+
+    if metric == "count":
+        cur_agg = cur.groupby(["hour", "freq_band"], as_index=False)["count_one"].sum()
+        cur_agg = cur_agg.rename(columns={"count_one": "value"})
+    else:
+        cur_agg = cur.groupby(["hour", "freq_band"], as_index=False)["signal_strength"].mean()
+        cur_agg = cur_agg.rename(columns={"signal_strength": "value"})
+
+    merged = pd.merge(cur_agg, stats, on=["hour", "freq_band"], how="left")
+    merged["z"] = (merged["value"] - merged["mean"]) / merged["std"].replace(0, np.nan)
+
+    # Rank anomalies by absolute z
+    merged["abs_z"] = merged["z"].abs()
+    merged = merged.sort_values("abs_z", ascending=False)
+    return cur, merged
+
+
+# ------------------------------- Data ingest -------------------------------
+st.sidebar.header("Data")
+source = st.sidebar.radio("Choose data source", ["Upload CSV", "Fetch from API", "Use sample data"], index=2)
+
+df: pd.DataFrame | None = None
+
+if source == "Upload CSV":
+    up = st.sidebar.file_uploader("Upload rf_measurements CSV", type=["csv"]) 
+    if up:
+        df = pd.read_csv(up)
+elif source == "Fetch from API":
+    st.sidebar.write("Provide an HTTP endpoint returning JSON array or CSV.")
+    api_url = st.sidebar.text_input("API URL (GET)", placeholder="https://.../rf-data?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=1000")
+    as_csv = st.sidebar.checkbox("Response is CSV", value=False)
+    headers_txt = st.sidebar.text_area("Optional headers JSON", value="{}")
+    if st.sidebar.button("Fetch", use_container_width=True) and api_url:
         try:
-            inner = json.loads(payload["body"])
-            if isinstance(inner, dict) and "results" in inner:
-                return inner
-            if isinstance(inner, list):
-                return {"results": inner, "count": len(inner)}
-            return {"raw": inner}
+            headers = json.loads(headers_txt or "{}")
         except Exception:
-            return {"raw": payload}
-
-    return {"raw": payload}
-
-# Helps model understand differnt image formats as i added option for images and whatnot. Not all models understand images btw. I listed ones that do at top under "VISION_CAPABLE."
-
-IMAGE_MIME_TO_FORMAT = {
-    "image/png": "png",
-    "image/jpeg": "jpeg",
-    "image/jpg": "jpeg",
-    "image/webp": "webp",
-    "image/gif": "gif",
-}
-
-def build_user_content(text: str, files: list, model_id: str):
-    """
-    (Streamlit doesn't like triple quotes unless inside function like this so that's why 
-    I have to use other comment styles above btw i.e. #---#). Plus I think above looks cooler/cleaner.
-    Build Converse 'content' array for a user turn (AWS terms not mine)
-    - Always includes the text (if provided).
-    - If the model is vision-capable (able to see images), include supported images inline.
-    - Unsupported files are ignored for the model, but we can make it previewable in the UI.
-    
-    """
-    content = []
-    if text:
-        content.append({"text": text})
-
-    if not files:
-        return content
-
-    if not VISION_CAPABLE.get(model_id, False):
-        # Text-only: skips attachments for the API call
-        st.info("Selected model is text-only; attached files will be ignored by the model.")
-        return content
-
-    # Add supported images as inline image parts. This may need some debugging down the line, but not priority now.
-    for f in files:
-        mime = getattr(f, "type", None) or ""
-        if mime in IMAGE_MIME_TO_FORMAT:
-            img_bytes = f.read()
-            f.seek(0)  # reset for any subsequent UI previews
-            content.append({
-                "image": {
-                    "format": IMAGE_MIME_TO_FORMAT[mime],
-                    "source": {"bytes": img_bytes}
-                }
-            })
+            headers = {}
+        r = requests.get(api_url, headers=headers, timeout=30)
+        r.raise_for_status()
+        if as_csv:
+            df = pd.read_csv(io.StringIO(r.text))
         else:
-            # Non-image or unsupported type: ignore for the API call
-            pass
+            data = r.json()
+            df = pd.DataFrame(data)
+else:
+    df = _make_sample(n_days=14)
 
-    return content
+if df is None or df.empty:
+    st.info("Load data to begin. Use sample data if you just want to explore.")
+    st.stop()
 
-# This adds in session for keeping track of files, what was said, etc. Still neeeds testing so...
-def converse_with_tools(user_text: str, files=None, history=None):
-    if history is None:
-        history = []
-    files = files or []
+# Prepare
+try:
+    df = _prep(df)
+except Exception as e:
+    st.error(f"Data prep failed: {e}")
+    st.stop()
 
-    # You will need to refer to Converse API formatting to understand this. Basically you have to define what role
-    # is taking place based on documentation. Will add docs later, but just google converse API docs & you;ll get it.
-    messages = [{"role": "user", "content": [{"text": SYSTEM_MSG}]}]
-    messages.extend(history)
+# Optional filters
+with st.sidebar.expander("Filters", expanded=False):
+    locs = ["(all)"] + sorted([x for x in df["location"].dropna().unique()])
+    devs = ["(all)"] + sorted([x for x in df["device_type"].dropna().unique()])
+    mods = ["(all)"] + sorted([x for x in df["modulation"].dropna().unique()])
+    sel_loc = st.selectbox("Location", options=locs)
+    sel_dev = st.selectbox("Device type", options=devs)
+    sel_mod = st.selectbox("Modulation", options=mods)
 
-    user_content = build_user_content(user_text, files, model_id)
-    messages.append({"role": "user", "content": user_content})
-   
-    #------------------------Round 1 for tool calls---------------------------------------------------------------------
-    # Sets to allow tool calling with converse API and all the cool doo dads the kids are using these days like tokens
-    # temp, etc. This can be tweaked later if PM wants certain responses back in certain form/tone/etc.
-    #-------------------------------------------------------------------------------------------------------------------
-    
-    resp = brt.converse(
-        modelId=model_id,
-        toolConfig={"tools": TOOLS},
-        messages=messages,
-        inferenceConfig={"temperature": 0, "topP": 1, "maxTokens": 1024},
-    )
-    # Sets up for adding all tools we willl need to add for different sensors 
-    # Right now we only have one so it will just use query_measurements based on how we defined it in TOOLS variable (up top)
-    out_msg = resp.get("output", {}).get("message", {}) or {}
-    out_content = out_msg.get("content", []) or []
-    tool_uses = [c for c in out_content if "toolUse" in c]
+mask = pd.Series(True, index=df.index)
+if sel_loc != "(all)":
+    mask &= (df["location"] == sel_loc)
+if sel_dev != "(all)":
+    mask &= (df["device_type"] == sel_dev)
+if sel_mod != "(all)":
+    mask &= (df["modulation"] == sel_mod)
 
-    if tool_uses:
-        tu = tool_uses[0]["toolUse"]
-        tool_name = tu["name"]
-        tool_input = tu.get("input", {})
+df_f = df[mask].copy()
 
-        if tool_name == "query_rf_measurements":
-            try:
-                tool_result = call_rf_api(tool_input)
-                tool_result_text = json.dumps(tool_result)
-            except Exception as e:
-                tool_result_text = json.dumps({"error": str(e)})
+# ------------------------------- Date ranges -------------------------------
+min_date, max_date = df_f["date"].min(), df_f["date"].max()
+colA, colB = st.columns(2)
+with colA:
+    st.subheader("Baseline window")
+    base_range = st.date_input("Pick baseline date range", value=(max(min_date, max_date - timedelta(days=7)), max_date - timedelta(days=1)), min_value=min_date, max_value=max_date)
+with colB:
+    st.subheader("Current window")
+    cur_range = st.date_input("Pick current date range", value=(max_date - timedelta(days=1), max_date), min_value=min_date, max_value=max_date)
 
-            # Keep the assistant's toolUse turn
-            messages.append({"role": "assistant", "content": out_content})
-            # Provide toolResult (Converse expects role='user')
-            messages.append({
-                "role": "user",
-                "content": [{
-                    "toolResult": {
-                        "toolUseId": tu["toolUseId"],
-                        "content": [{"text": tool_result_text}],
-                    }
-                }],
-            })
+metric = st.segmented_control("Metric", options=["count", "signal_strength"], default="count", help="Counts = activity volume; signal_strength = average dBm.")
+thresh = st.slider("Anomaly threshold |z|", 1.5, 5.0, 3.0, 0.5)
 
-            # Round 2: final answer after using tools and logic/instructions we giave it
-            resp2 = brt.converse(
-                modelId=model_id,
-                toolConfig={"tools": TOOLS},
-                messages=messages,
-                inferenceConfig={"temperature": 0, "topP": 1, "maxTokens": 1024},
-            )
-            final = resp2.get("output", {}).get("message", {}).get("content", []) or []
-            final_text = "".join(c.get("text", "") for c in final if "text" in c)
-            return final_text or "_No response_", messages
+# ------------------------------ Build baseline -----------------------------
+base_df, stats = _build_baseline(df_f, base_range, metric=metric)
+if stats is None or stats.empty:
+    st.warning("No baseline stats — adjust the baseline range or filters.")
+    st.stop()
 
-    # No tool call path
-    final_text = "".join(c.get("text", "") for c in out_content if "text" in c)
-    return final_text or "_No response_", messages
+cur_df, scored = _score_period(df_f, cur_range, stats, metric=metric)
 
-
-# -------------------Setting up Chat Ui/user sessions (Still in beta seems to work but..)---------------------------------
-# As stated above this allows sessions so model can keep track of what was asked before etc. streamlit has it's docs on it
-# ------------------------------------------------------------------------------------------------------------------------
-if "history" not in st.session_state:
-    st.session_state.history = []  # store prior Converse-format messages (excluding the injected SYSTEM_MSG)
-if "chat_log" not in st.session_state:
-    st.session_state.chat_log = []  # [{'role': 'user'/'assistant', 'content': str}]
-
-# Render prior chat turns
-for turn in st.session_state.chat_log:
-    with st.chat_message(turn["role"]):
-        st.markdown(turn["content"])
-
-# --------------------------------- Chat input section---------------------------------------
-# New widget test - supports text + optional file(s) now, but file ingestion needs testing..
-prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True)
-
-# ---------- Small helper to pretty-order columns for the new table ----------
-def _order_columns_for_display(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    preferred = [
-        "measurement_timestamp",  # key timestamp in new schema
-        "site", "uuid", "channel", "classification", "collect_id", "telemetry_id",
-        "carrier_frequency", "frequency_band", "collection_mode", "bandwidth", "polarity",
-        "carrier_snr", "relative_carrier_power", "relative_noise_floor", "confidence",
-        "frequency_shift", "peak",
-        "pointing_information_azimuth", "pointing_information_elevation",
-        "pointing_information_polarization", "pointing_information_antenna_name",
-        "signal_is_measured_signal", "signal_is_spread_signal", "signal_uuid",
-        "signal_baud_rate", "signal_subcarrier_frequency", "signal_subcarrier_snr",
-        "signal_confidence", "signal_detection_status", "signal_id",
-        "signal_measured_telemetry_id", "signal_chip_rate", "signal_code_taps",
-        "signal_code_fill", "signal_code_length", "signal_pn_order",
-        "satellite_scc", "satellite_classification", "satellite_name",
-        "satellite_international_designator", "satellite_launch_date", "satellite_object_type",
-        "satellite_owner_code", "satellite_owner_name", "satellite_uuid",
-        "id"
-    ]
-    cols = [c for c in preferred if c in df.columns]
-    rest = [c for c in df.columns if c not in cols]
-    return df[cols + rest] if cols else df
-
-# Handles the submitted chat input/prompt from end users for both files and text.
-if prompt:
-    text = getattr(prompt, "text", "") if prompt else ""
-    files = prompt.get("files", []) if isinstance(prompt, dict) else []
-
-    # Shows user turn in UI widget (text + previews)
-    with st.chat_message("user"):
-        if text:
-            st.markdown(text)
-        if files:
-            for f in files:
-                mime = getattr(f, "type", None) or ""
-                name = getattr(f, "name", "uploaded_file")
-                if mime.startswith("image/"):
-                    st.image(f, caption=name)
-                else:
-                    st.write(f"📎 {name} ({mime or 'unknown type'})")
-
-    # Run the now "tools-enabled" Converse version with session history and file input etc. 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
-            try:
-                answer, new_history = converse_with_tools(text, files=files, history=st.session_state.history)
-                st.markdown(answer)
-                # Persist chat history (for model context) and UI log
-                st.session_state.history = new_history
-                st.session_state.chat_log.append({"role": "user", "content": (text or "(file(s) only)")})
-                st.session_state.chat_log.append({"role": "assistant", "content": answer})
-            except Exception as e:
-                st.error(f"Tools run failed: {e}")
-
-
-# -----------------------------------------------------------------------------------------------------------
-# This handles the RF Data Queries to the DB. Allows dynamic queries with 
-# start/end/limit parmeters to call the Postgres API via my lambda fucntion/api gateway
-# combo and return results. Looked at stremalit docs to help me set up.
-
-###Note: Need to change to use datetime ISO format. To do so I need to add in correct parmeter after each input.
-# This is currently why you'll get the wrong data back from database calls.### <--- Will update after fix.
-#--------------------------------------------------------------------------------------------------------------
-st.header("📡 RF Data Query to database")
-
-col1, col2, col3 = st.columns(3)
+# ------------------------------- KPI overview ------------------------------
+col1, col2, col3, col4 = st.columns(4)
 with col1:
-    # Using date objects for clean defaults that Streamlit expects
-    start_date = st.date_input("Start Date", value=date(2023, 5, 5), min_value=date(2023, 5, 5))
+    st.metric("Records (baseline)", f"{len(base_df):,}")
 with col2:
-    end_date = st.date_input("End Date", value=date(2023, 5, 6))
+    st.metric("Records (current)", f"{len(cur_df):,}")
 with col3:
-    limit = st.number_input("Limit", min_value=1, max_value=500, value=10) #setting defaults for limits, but want to hard code it in lambda too.
+    st.metric("Freq bands", f"{df_f['freq_band'].nunique():,}")
+with col4:
+    st.metric("Max |z|", f"{np.nanmax(scored['abs_z']) if not scored.empty else 0:.2f}")
 
-# Handles button widget and makes sure query parameters are passed to API
-if st.button("Grab RF Data"):
-    with st.spinner("Grabbing RF measurements..."):
-        try:
-            # Streamlit date_input returns date objects; stringify as YYYY-MM-DD for the API
-            start_str = start_date.strftime("%Y-%m-%d") if hasattr(start_date, "strftime") else str(start_date)
-            end_str = end_date.strftime("%Y-%m-%d") if hasattr(end_date, "strftime") else str(end_date)
+# -------------------------- Heatmaps: pattern vs delta ----------------------
 
-            params = {"start": start_str, "end": end_str, "limit": int(limit)}
-            response = requests.get(RF_API_URL, params=params, timeout=60)
+# Baseline mean heatmap
+heat_base = stats.pivot(index="freq_band", columns="hour", values="mean").fillna(0)
+fig_base = px.imshow(
+    heat_base,
+    aspect="auto",
+    labels=dict(x="Hour of day", y="Frequency band", color=f"Baseline mean ({'count' if metric=='count' else 'dBm'})"),
+    title="Baseline Pattern of Life (hour × band)"
+)
+st.plotly_chart(fig_base, use_container_width=True)
 
-            # 🔎 Debugging visibility
-            st.write("🔎 Params sent:", params)
-            # st.write("🔍 Raw RF API response:", response.text)
+# Current period value heatmap
+if not cur_df.empty:
+    if metric == "count":
+        cur_agg = cur_df.groupby(["hour", "freq_band"], as_index=False)["count_one"].sum()
+        cur_agg = cur_agg.rename(columns={"count_one": "value"})
+    else:
+        cur_agg = cur_df.groupby(["hour", "freq_band"], as_index=False)["signal_strength"].mean()
+        cur_agg = cur_agg.rename(columns={"signal_strength": "value"})
+    heat_cur = cur_agg.pivot(index="freq_band", columns="hour", values="value").fillna(0)
+    fig_cur = px.imshow(
+        heat_cur,
+        aspect="auto",
+        labels=dict(x="Hour of day", y="Frequency band", color=f"Current ({'count' if metric=='count' else 'dBm'})"),
+        title="Current Period (hour × band)"
+    )
+    st.plotly_chart(fig_cur, use_container_width=True)
 
-            if response.status_code == 200:
-                try:
-                    payload = response.json()
+# Z‑score heatmap (delta)
+if not scored.empty:
+    z_mat = scored.pivot(index="freq_band", columns="hour", values="z")
+    fig_z = px.imshow(
+        z_mat,
+        aspect="auto",
+        color_continuous_midpoint=0,
+        labels=dict(x="Hour of day", y="Frequency band", color="z‑score (Δ vs baseline)"),
+        title="Change vs Baseline (z‑score) — red/blue = anomaly"
+    )
+    st.plotly_chart(fig_z, use_container_width=True)
 
-                    # Support BOTH shapes:
-                    # New proxy response: {"results":[...], "count":N}
-                    # Old non-proxy-wrapped: {"statusCode":200,"body":"{\"results\":...}"}
-                    if isinstance(payload, dict) and "results" in payload:
-                        results = payload.get("results", [])
-                        count = payload.get("count", len(results))
-                    elif isinstance(payload, dict) and "body" in payload:
-                        body_data = json.loads(payload["body"])
-                        if isinstance(body_data, dict) and "results" in body_data:
-                            results = body_data.get("results", [])
-                            count = body_data.get("count", len(results))
-                        elif isinstance(body_data, list):
-                            results = body_data
-                            count = len(results)
-                        else:
-                            raise ValueError("Unexpected body structure in legacy response.")
-                    else:
-                        raise ValueError("Unexpected response JSON structure from API.")
+# ----------------------------- Anomalies table ------------------------------
 
-                    # Convert the parsed data (list of dictionaries) into a DataFrame
-                    df = pd.DataFrame(results)
+if not scored.empty:
+    flagged = scored[np.abs(scored["z"]) >= thresh].copy()
+    flagged = flagged.sort_values("abs_z", ascending=False)
+    st.subheader("Anomalies (cells where current deviates from baseline)")
+    st.dataframe(flagged[["hour", "freq_band", "value", "mean", "std", "z"]], use_container_width=True, hide_index=True)
 
-                    # Convert new timestamp columns if present and sort by measurement time
-                    if "measurement_timestamp" in df.columns:
-                        df["measurement_timestamp"] = pd.to_datetime(df["measurement_timestamp"], errors="coerce")
+    # Export
+    csv = flagged.to_csv(index=False).encode("utf-8")
+    st.download_button("Download anomalies CSV", data=csv, file_name="rf_anomalies.csv", mime="text/csv")
+else:
+    st.info("No anomalies computed — adjust your ranges or threshold.")
 
-                    if "insert_timestamp" in df.columns:
-                        df["insert_timestamp"] = pd.to_datetime(df["insert_timestamp"], errors="coerce")
+# ----------------------------- Time series views ----------------------------
 
-                    if "measurement_timestamp" in df.columns:
-                        df = df.sort_values(by="measurement_timestamp", ascending=True)
+st.subheader("Trends over time")
+left, right = st.columns(2)
 
-                    # Pretty-order columns for readability with new schema
-                    df = _order_columns_for_display(df)
+# Daily counts
+with left:
+    daily = df_f.groupby("date", as_index=False)["count_one"].sum()
+    fig = px.line(daily, x="date", y="count_one", markers=True, title="Daily activity (records)")
+    st.plotly_chart(fig, use_container_width=True)
 
-                    st.success(f"RF Data Results (count={count})")
-                    if not df.empty:
-                        st.dataframe(df)
-                        # Optional CSV download (handy for analysts)
-                        csv = df.to_csv(index=False).encode("utf-8")
-                        st.download_button("Download CSV", data=csv, file_name="rf_measurements.csv", mime="text/csv")
-                    else:
-                        st.info("No rows returned for the selected range.")
+# Hourly strength average
+with right:
+    hourly = df_f.groupby("hour", as_index=False)["signal_strength"].mean()
+    fig = px.line(hourly, x="hour", y="signal_strength", markers=True, title="Average signal strength by hour (dBm)")
+    st.plotly_chart(fig, use_container_width=True)
 
-                except Exception as parse_err:
-                    st.error("Failed to parse JSON from RF API.")
-                    st.text(f"Error: {parse_err}")
-                    st.code(response.text)
-            else:
-                st.error(f"Error {response.status_code}")
-                st.code(response.text)
+# --------------------------- Explanatory callouts ---------------------------
 
-        except Exception as e:
-            st.error(f"Request failed: {str(e)}")
+st.markdown(
+    """
+**How this works**  
+• *Pattern of Life (PoL)* is the typical RF behavior by time‑of‑day and band.  
+• We build a **baseline** using your chosen date range.  
+• The **current** window is compared to the baseline using **z‑scores**:  
+  \( z = (current - mean) / std \). Larger |z| means more unusual.
 
+**What to look for**  
+• Bright bands in the baseline heatmap = typical routine.  
+• Strong red/blue in the z‑score heatmap = change vs. routine (potential anomaly).  
+• Use filters to focus on a location, device type, or modulation.
+
+**Tips**  
+• Use the **count** metric to find unexpected activity volume (e.g., extra packets at night).  
+• Use **signal_strength** to catch proximity/power changes (e.g., a transmitter moved closer).  
+• Tune the threshold |z| to your noise level (2–3 is common; 4–5 is stricter).
+"""
+)
