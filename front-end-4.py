@@ -49,14 +49,23 @@ model_id = MODELS[model_choice]
 
 # This is for storing my secrets in order to use AWS resources securely. 
 # No idea yet how they will do it on unclass and how PM will prefer in other location yet.
-PROFILE = os.getenv("AWS_PROFILE")
-REGION  = os.getenv("AWS_REGION")
-try:
-    session = boto3.Session(profile_name=PROFILE, region_name=REGION)
-    brt = session.client("bedrock-runtime")
-except (NoCredentialsError, NoRegionError):
-    session = boto3.Session(profile_name=PROFILE, region_name=REGION or "us-east-1")
-    brt = session.client("bedrock-runtime")
+region = (st.secrets.get("aws", {}).get("region")
+          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
+
+access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
+secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
+# session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
+
+if access_key and secret_key:
+    brt = boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
+        # aws_session_token=session_token
+    )
+else:
+    brt = boto3.client("bedrock-runtime", region_name=region) 
 
 # ----------------------- NEW: in-memory store so the model can reference prior pulls --------------------------
 if "rf_store" not in st.session_state:
