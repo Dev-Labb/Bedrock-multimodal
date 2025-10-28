@@ -4,12 +4,14 @@ import json
 import requests
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import date
 import boto3
 from botocore.exceptions import NoCredentialsError, NoRegionError, ClientError
 
+
 st.set_page_config(page_title="🧠 Multi-Modal Bedrock Test", page_icon="🧠")
 st.title("🧠 Multi-Modal Bedrock Test")
+
 
 # ---------------------------------------------------------------------------------------------------------------
 # Alot of documentation for streamlit library can be found here: https://docs.streamlit.io/develop/api-reference/
@@ -18,7 +20,7 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
 # ----------------------------------------------------------------------------------------------------------------
 
-MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
+MODEL_API_URL = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/generate/v2"
 RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
@@ -32,7 +34,7 @@ RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/
 MODELS = {
     "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "Amazon Nova Micro": "amazon.nova-micro-v1:0",
-    # "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
+    #"Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
 # Which of the above are multimodal meaning they can use proper API. Meta Llamaa doesn't support what we're going with for now.
@@ -46,6 +48,7 @@ VISION_CAPABLE = {
 
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 model_id = MODELS[model_choice]
+
 
 # This is for storing my secrets in order to use AWS resources securely. 
 # No idea yet how they will do it on unclass and how PM will prefer in other location yet.
@@ -65,213 +68,44 @@ if access_key and secret_key:
         # aws_session_token=session_token
     )
 else:
-    brt = boto3.client("bedrock-runtime", region_name=region) 
-
-# ----------------------- NEW: in-memory store so the model can reference prior pulls --------------------------
-if "rf_store" not in st.session_state:
-    # key -> {"params": {...}, "df": DataFrame, "created": iso, "label": str}
-    st.session_state.rf_store = {}
-if "rf_store_order" not in st.session_state:
-    st.session_state.rf_store_order = []  # preserve order of creation
-
-def _mk_store_key() -> str:
-    n = len(st.session_state.rf_store) + 1
-    return f"run-{n:03d}"
-
-def _summarize_df(df: pd.DataFrame) -> dict:
-    """
-    Tiny summary that is cheap in tokens but useful for the model when referencing past pulls.
-    Prioritize metrics in SYSTEM_MSG: timestamps, site, carrier_frequency, frequency_band, carrier_snr,
-    relative_carrier_power, relative_noise_floor, pointing angles, bandwidth, polarity, frequency_shift,
-    signal_detection_status.
-    """
-    if df.empty:
-        return {"count": 0}
-
-    # Convert timestamps if present (some APIs return strings)
-    for col in ["measurement_timestamp"]:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
-
-    summary = {"count": len(df), "columns": list(df.columns)}
-    # Numeric columns of interest (only those present)
-    numeric_cols = [
-        "carrier_frequency", "carrier_snr", "relative_carrier_power", "relative_noise_floor",
-        "bandwidth", "frequency_shift"
-    ]
-    present_num = [c for c in numeric_cols if c in df.columns]
-    if present_num:
-        desc = df[present_num].describe().to_dict()
-        # keep only mean/min/max (reduce tokens)
-        compact = {}
-        for c, stats in desc.items():
-            compact[c] = {k: float(v) for k, v in stats.items() if k in ("mean", "min", "max")}
-        summary["numeric_summary"] = compact
-
-    # Categorical quick counts
-    for cat in ["site", "frequency_band", "polarity", "signal_detection_status"]:
-        if cat in df.columns:
-            vc = df[cat].astype(str).value_counts().head(5).to_dict()
-            summary[f"top_{cat}"] = vc
-
-    # Time span
-    if "measurement_timestamp" in df.columns:
-        ts = df["measurement_timestamp"].dropna()
-        if not ts.empty:
-            summary["time_range"] = {
-                "min": ts.min().isoformat(),
-                "max": ts.max().isoformat()
-            }
-
-    return summary
-
-def _store_results(params: dict, results: list[dict]) -> dict:
-    """
-    Store the dataset in session and return store_key + light summary + a small sample.
-    """
-    df = pd.DataFrame(results)
-    created = datetime.utcnow().isoformat() + "Z"
-    key = _mk_store_key()
-    label = f"{key}: {params.get('start','?')} → {params.get('end','?')} (limit={params.get('limit','')})"
-    st.session_state.rf_store[key] = {
-        "params": {k: v for k, v in params.items()},
-        "df": df,
-        "created": created,
-        "label": label
-    }
-    st.session_state.rf_store_order.append(key)
-
-    # prepare a cheap sample for the model (avoid blasting tokens)
-    sample_cols = [
-        c for c in [
-            "measurement_timestamp", "site", "carrier_frequency", "frequency_band",
-            "carrier_snr", "relative_carrier_power", "relative_noise_floor", "bandwidth",
-            "polarity", "frequency_shift", "signal_detection_status", "id"
-        ] if c in df.columns
-    ]
-    sample = df[sample_cols].head(12).to_dict(orient="records") if sample_cols else df.head(10).to_dict(orient="records")
-
-    payload = {
-        "store_key": key,
-        "label": label,
-        "params": params,
-        "count": len(df),
-        "summary": _summarize_df(df),
-        "sample": sample,
-        "available_runs": [
-            {"key": k, "label": st.session_state.rf_store[k]["label"], "count": len(st.session_state.rf_store[k]["df"])}
-            for k in st.session_state.rf_store_order
-        ]
-    }
-    return payload
-
-def _compare_runs(current_key: str, reference_key: str) -> dict:
-    """
-    Compare two stored runs by key: numeric deltas and (if applicable) per-day count diffs.
-    Keep it compact for LLM consumption.
-    """
-    store = st.session_state.rf_store
-    if current_key not in store or reference_key not in store:
-        return {"error": "One or both run keys not found in store."}
-
-    d1 = store[current_key]["df"].copy()
-    d2 = store[reference_key]["df"].copy()
-
-    # Ensure timestamps parsed (if present)
-    for df in (d1, d2):
-        if "measurement_timestamp" in df.columns:
-            df["measurement_timestamp"] = pd.to_datetime(df["measurement_timestamp"], errors="coerce")
-
-    res = {
-        "current": {"key": current_key, "label": store[current_key]["label"], "count": len(d1)},
-        "reference": {"key": reference_key, "label": store[reference_key]["label"], "count": len(d2)},
-        "deltas": {},
-        "per_day_counts_delta": None
-    }
-
-    # Numeric columns to compare (present in both)
-    numeric_cols = [
-        "carrier_frequency", "carrier_snr", "relative_carrier_power", "relative_noise_floor",
-        "bandwidth", "frequency_shift"
-    ]
-    shared = [c for c in numeric_cols if c in d1.columns and c in d2.columns]
-    def _mm(df, col):
-        s = df[col].dropna()
-        if s.empty:
-            return None
-        return {"mean": float(s.mean()), "min": float(s.min()), "max": float(s.max())}
-
-    for c in shared:
-        a = _mm(d1, c); b = _mm(d2, c)
-        if a and b:
-            res["deltas"][c] = {
-                "current": a, "reference": b,
-                "delta_mean": (a["mean"] - b["mean"])
-            }
-
-    # Per-day counts if timestamp present
-    if "measurement_timestamp" in d1.columns and "measurement_timestamp" in d2.columns:
-        d1["day"] = d1["measurement_timestamp"].dt.date
-        d2["day"] = d2["measurement_timestamp"].dt.date
-        c1 = d1.groupby("day").size().rename("current")
-        c2 = d2.groupby("day").size().rename("reference")
-        joined = pd.concat([c1, c2], axis=1).fillna(0).astype(int)
-        joined["delta"] = joined["current"] - joined["reference"]
-        # keep short
-        res["per_day_counts_delta"] = joined.reset_index().rename(columns={"index": "day"}) \
-                                           .sort_values("day").tail(14).to_dict(orient="records")
-
-    return res
-
+    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
 # --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
 # This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
 # we copy the OpenAPI Json schema and plug it in as a tool. This will enable model to use API when it needs to based on intstructions
 # you give it in System_MSG aka instructions to model system. Make sure this is sound or else model will return tons of errors... trust me....
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
-TOOLS = [
-    {
-        "toolSpec": {
-            "name": "query_rf_measurements",
-            "description": (
-                "Query RF measurement data via API Gateway and STORE the result for later comparison. "
-                "Parameters: start (YYYY-MM-DD), end (YYYY-MM-DD), limit (integer). "
-                "Returns: store_key, label, count, params, summary, sample, and a list of available_runs you can reference later."
-            ),
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "start": {"type": "string", "description": "Start date YYYY-MM-DD"},
-                        "end": {"type": "string", "description": "End date YYYY-MM-DD"},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 10}
-                    },
-                    "required": ["start", "end"]
-                }
-            }
-        }
-    },
-    {
-        "toolSpec": {
-            "name": "compare_rf_runs",
-            "description": (
-                "Compare two previously stored RF runs by store_key. "
-                "Input: current_key, reference_key. "
-                "Returns numeric deltas (mean/min/max) for key metrics and optional per-day count deltas."
-            ),
-            "inputSchema": {
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "current_key": {"type": "string", "description": "Key of the current run (e.g., run-003)"},
-                        "reference_key": {"type": "string", "description": "Key of the reference/baseline run (e.g., run-001)"}
-                    },
-                    "required": ["current_key", "reference_key"]
-                }
+TOOLS = [{
+    "toolSpec": {
+        "name": "query_rf_measurements",
+        "description": (
+            "Query RF measurement data via API Gateway. "
+            "Parameters: start (YYYY-MM-DD), end (YYYY-MM-DD), limit (integer). "
+            "Backend returns columns such as: "
+            "site, uuid, channel, classification, collect_id, telemetry_id, "
+            "carrier_frequency, frequency_band, collection_mode, bandwidth, polarity, "
+            "carrier_snr, relative_carrier_power, relative_noise_floor, confidence, frequency_shift, peak, "
+            "pointing_information_azimuth, pointing_information_elevation, pointing_information_polarization, "
+            "pointing_information_antenna_name, signal_is_measured_signal, signal_is_spread_signal, signal_uuid, "
+            "signal_baud_rate, signal_subcarrier_frequency, signal_subcarrier_snr, signal_confidence, "
+            "signal_detection_status, signal_id, signal_measured_telemetry_id, signal_chip_rate, signal_code_taps, "
+            "signal_code_fill, signal_code_length, signal_pn_order, satellite_scc, satellite_classification, "
+            "satellite_name, satellite_international_designator, satellite_launch_date, satellite_object_type, "
+            "satellite_owner_code, satellite_owner_name, satellite_uuid, measurement_timestamp, id."
+        ),
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "start": {"type": "string", "description": "Start date YYYY-MM-DD"},
+                    "end": {"type": "string", "description": "End date YYYY-MM-DD"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 10}
+                },
+                "required": ["start", "end"]
             }
         }
     }
-]
+}]
 
 SYSTEM_MSG = (    
     """You help RF data analysts. The analysts are primarily concerned with pattern of life changes for
@@ -279,13 +113,12 @@ SYSTEM_MSG = (
      You should prioritize these metrics for pattern of life determinations: measurement_timestamp
      site, carrier_frequency, frequency_band, carrier_snr, relative_carrier_power, relative_noise_floor, pointing_information_azimuth,
      pointing_information_elevation, bandwidth, polarity, frequency_shift, and signal_detection_status. 
-     The scc will be found using query_rf_measurements tool. When the user asks about RF measurements, call query_rf_measurements with start, end, and optional limit. 
-     Analysts tend to use several of the metrics from the query_rf_mesurements tool to determine pattern of life for the scc.
-     They are also concerned with changes from the normal pattern of life. You will also use the results from query_rf_measurements to determine those changes, but
-     will look into: frequency_shifts and signal_subcarrier_snr on top of the other metrics mentioned to help determine why a pattern of life change may have occurred.
-     If the user asks to compare with a prior pull, or mentions “previous”, use compare_rf_runs with the returned store_key values from earlier runs.
-     Keep answers concise; include a short table only when necessary. Assume today's date is October 24 2025.
-     Otherwise, if the user asks questions that aren't RF related answer them to the best of your ability."""
+    "The scc will be found using query_rf_measurements tool. When the user asks about RF measurements, call query_rf_measurements with start, end, and optional limit. 
+    "Analysts tend to use several of the metrics from the query_rf_mesurements tool to determine pattern of life for the scc.
+    They are also concerned with changes from the normal pattern of life. You will also use the results from query_rf_measurements to determine those changes, but
+    will look into: frequency_shifts and signal_subcarrier_snr on top of the other metrics mentioned to help determine why a pattern of life change may have occurred.
+    "Otherwise, if the user asks questions that aren't rf related answer them to the best of your ability. Assume the date you are running on now is October 24 2025"""
+    #"If the user did not provide dates, ask for them before calling the tool."#Can coomment this out if we want to filter to only rf related
 )
 
 # Calls my RF API, but can replace with whatever backend API. Important to note params as these are the minimal required to call API
@@ -302,40 +135,28 @@ def call_rf_api(params: dict) -> dict:
     r.raise_for_status()
     payload = r.json()
 
-    # --------------------------------------------------------------------------------------------------------------------------------------------------
-    # This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
-    # unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
-    # Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
-    # to correct again. It is very useful to see raw responses for debugging purposes.
-    # --------------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------------
+# This took some debugging. Lots I did with previous stages, but basically, results will come in a nested dictinary and so you need to
+# unpack the json response (list containing dictionary values) and get only the contents of the body so model can read it. 
+# Use print if you have errors with response or I may just add error (try/catch) correction later if API changes again from Converse/Converse stream 
+# to correct again. It is very useful to see raw responses for debugging purposes.
+# --------------------------------------------------------------------------------------------------------------------------------------------------
     
     if isinstance(payload, dict) and "results" in payload:
-        results = payload["results"]
-    elif isinstance(payload, dict) and "body" in payload:
+        return payload
+
+    if isinstance(payload, dict) and "body" in payload:
         try:
             inner = json.loads(payload["body"])
             if isinstance(inner, dict) and "results" in inner:
-                results = inner["results"]
-            elif isinstance(inner, list):
-                results = inner
-            else:
-                results = []
+                return inner
+            if isinstance(inner, list):
+                return {"results": inner, "count": len(inner)}
+            return {"raw": inner}
         except Exception:
-            results = []
-    else:
-        results = []
+            return {"raw": payload}
 
-    # NEW: store and return a compact wrapper (store_key + summary + small sample)
-    stored = _store_results(params, results)
-    return stored
-
-def call_compare_tool(params: dict) -> dict:
-    """
-    Execute the comparison against stored datasets. The model supplies keys.
-    """
-    cur_key = params.get("current_key")
-    ref_key = params.get("reference_key")
-    return _compare_runs(cur_key, ref_key)
+    return {"raw": payload}
 
 # Helps model understand differnt image formats as i added option for images and whatnot. Not all models understand images btw. I listed ones that do at top under "VISION_CAPABLE."
 
@@ -425,44 +246,34 @@ def converse_with_tools(user_text: str, files=None, history=None):
 
         if tool_name == "query_rf_measurements":
             try:
-                tool_result = call_rf_api(tool_input)   # returns store_key + summary + sample
+                tool_result = call_rf_api(tool_input)
                 tool_result_text = json.dumps(tool_result)
             except Exception as e:
                 tool_result_text = json.dumps({"error": str(e)})
 
-        elif tool_name == "compare_rf_runs":
-            try:
-                compare_result = call_compare_tool(tool_input)
-                tool_result_text = json.dumps(compare_result)
-            except Exception as e:
-                tool_result_text = json.dumps({"error": str(e)})
+            # Keep the assistant's toolUse turn
+            messages.append({"role": "assistant", "content": out_content})
+            # Provide toolResult (Converse expects role='user')
+            messages.append({
+                "role": "user",
+                "content": [{
+                    "toolResult": {
+                        "toolUseId": tu["toolUseId"],
+                        "content": [{"text": tool_result_text}],
+                    }
+                }],
+            })
 
-        else:
-            tool_result_text = json.dumps({"error": f"Unknown tool {tool_name}"})
-
-        # Keep the assistant's toolUse turn
-        messages.append({"role": "assistant", "content": out_content})
-        # Provide toolResult (Converse expects role='user')
-        messages.append({
-            "role": "user",
-            "content": [{
-                "toolResult": {
-                    "toolUseId": tu["toolUseId"],
-                    "content": [{"text": tool_result_text}],
-                }
-            }],
-        })
-
-        # Round 2: final answer after using tools and logic/instructions we giave it
-        resp2 = brt.converse(
-            modelId=model_id,
-            toolConfig={"tools": TOOLS},
-            messages=messages,
-            inferenceConfig={"temperature": 0, "topP": 1, "maxTokens": 5000},
-        )
-        final = resp2.get("output", {}).get("message", {}).get("content", []) or []
-        final_text = "".join(c.get("text", "") for c in final if "text" in c)
-        return final_text or "_No response_", messages
+            # Round 2: final answer after using tools and logic/instructions we giave it
+            resp2 = brt.converse(
+                modelId=model_id,
+                toolConfig={"tools": TOOLS},
+                messages=messages,
+                inferenceConfig={"temperature": 0, "topP": 1, "maxTokens": 5000},
+            )
+            final = resp2.get("output", {}).get("message", {}).get("content", []) or []
+            final_text = "".join(c.get("text", "") for c in final if "text" in c)
+            return final_text or "_No response_", messages
 
     # No tool call path
     final_text = "".join(c.get("text", "") for c in out_content if "text" in c)
@@ -476,22 +287,12 @@ if "history" not in st.session_state:
 if "chat_log" not in st.session_state:
     st.session_state.chat_log = []  # [{'role': 'user'/'assistant', 'content': str}]
 
-# Optional: Sidebar list of stored runs so we can see what the model can reference
-with st.sidebar:
-    st.subheader("Stored RF runs")
-    if st.session_state.rf_store_order:
-        for key in st.session_state.rf_store_order[-15:][::-1]:
-            meta = st.session_state.rf_store[key]
-            st.caption(f"• {meta['label']}  (rows={len(meta['df'])})")
-    else:
-        st.caption("No stored runs yet.")
-
-# Renders the  prior chat turns
+# Render prior chat turns
 for turn in st.session_state.chat_log:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-# --------------------------------- Chat input ---------------------------------------
+# --------------------------------- Chat input section---------------------------------------
 # New widget test - supports text + optional file(s) now, but file ingestion needs testing..
 prompt = st.chat_input(placeholder="Enter prompt or add a file:", accept_file=True)
 
