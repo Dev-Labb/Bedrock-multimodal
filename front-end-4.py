@@ -20,7 +20,7 @@ st.title("🧠 Multi-Modal Bedrock Test")
 # to reflect the updated staging names. First variable is for talking to model. Second is for SQL query backend. 
 # ----------------------------------------------------------------------------------------------------------------
 
-MODEL_API_URL = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/generate/v2"
+MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
 RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/
 MODELS = {
     "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "Amazon Nova Micro": "amazon.nova-micro-v1:0",
-    #"Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
+    # "Meta LLaMA3 2-1B Instruct": "meta.llama3-2-1b-instruct-v1:0"
 }
 
 # Which of the above are multimodal meaning they can use proper API. Meta Llamaa doesn't support what we're going with for now.
@@ -49,17 +49,26 @@ VISION_CAPABLE = {
 model_choice = st.selectbox("Select a model:", list(MODELS.keys()))
 model_id = MODELS[model_choice]
 
-
 # This is for storing my secrets in order to use AWS resources securely. 
 # No idea yet how they will do it on unclass and how PM will prefer in other location yet.
-PROFILE = os.getenv("AWS_PROFILE")
-REGION  = os.getenv("AWS_REGION")
-try:
-    session = boto3.Session(profile_name=PROFILE, region_name=REGION)
-    brt = session.client("bedrock-runtime")
-except (NoCredentialsError, NoRegionError):
-    session = boto3.Session(profile_name=PROFILE, region_name=REGION or "us-east-1")
-    brt = session.client("bedrock-runtime")
+region = (st.secrets.get("aws", {}).get("region")
+          if "aws" in st.secrets else os.getenv("AWS_REGION", "us-east-1"))
+
+access_key = st.secrets.get("aws", {}).get("access_key_id") if "aws" in st.secrets else os.getenv("AWS_ACCESS_KEY_ID")
+secret_key = st.secrets.get("aws", {}).get("secret_access_key") if "aws" in st.secrets else os.getenv("AWS_SECRET_ACCESS_KEY")
+# session_token = st.secrets.get("aws", {}).get("session_token") if "aws" in st.secrets else os.getenv("AWS_SESSION_TOKEN") #Will uncomment if I go back to temp sts sessions.
+
+if access_key and secret_key:
+    brt = boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
+        # aws_session_token=session_token
+    )
+else:
+    brt = boto3.client("bedrock-runtime", region_name=region) #brt is for bedrock Run Tiime so it knows the proper runtime and region to invoke models etc.
+
 
 # --------------------------------- Tools specs setup-----------------------------------------------------------------------------------------
 # This is for allowing model to be able to use tools like external/internal API's. One thing we will need to do is make sure
