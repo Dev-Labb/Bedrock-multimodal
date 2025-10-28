@@ -47,7 +47,7 @@ def _clamp_dates(start_str, end_str):
 # --------------------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------------------
-MODEL_API_URL = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/generate/v2"
+MODEL_API_URL = "https://nj03mfzl37.execute-api.us-east-1.amazonaws.com/testing/generate"
 RF_API_URL    = "https://tisa6rznoj.execute-api.us-gov-west-1.amazonaws.com/dev/measurements"
 
 # --------------------------------------------------------------------------------------
